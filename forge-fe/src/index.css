@@ -1,27 +1,27 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
   /* Custom Forge colors (non-overlapping with Shadcn) */
   --color-surface: #131720;
-  --color-surface-hover: #1A1F2B;
-  --color-border-light: #2A3144;
+  --color-surface-hover: #1a1f2b;
+  --color-border-light: #2a3144;
 
-  --color-text: #E2E8F0;
-  --color-text-muted: #6B7A99;
-  --color-text-dim: #4A5568;
+  --color-text: #e2e8f0;
+  --color-text-muted: #6b7a99;
+  --color-text-dim: #4a5568;
 
   --color-accent-glow: rgba(108, 92, 231, 0.15);
-  --color-green: #00D68F;
+  --color-green: #00d68f;
   --color-green-dim: rgba(0, 214, 143, 0.12);
-  --color-amber: #FFAA2C;
+  --color-amber: #ffaa2c;
   --color-amber-dim: rgba(255, 170, 44, 0.12);
-  --color-red: #FF6B6B;
+  --color-red: #ff6b6b;
   --color-red-dim: rgba(255, 107, 107, 0.12);
-  --color-blue: #4FC3F7;
+  --color-blue: #4fc3f7;
   --color-blue-dim: rgba(79, 195, 247, 0.12);
 
   /* Fonts */
@@ -35,37 +35,37 @@
 }
 
 .dark {
-  --background: #0B0E14;
-  --foreground: #E2E8F0;
+  --background: #0b0e14;
+  --foreground: #e2e8f0;
   --card: #131720;
-  --card-foreground: #E2E8F0;
+  --card-foreground: #e2e8f0;
   --popover: #131720;
-  --popover-foreground: #E2E8F0;
-  --primary: #6C5CE7;
+  --popover-foreground: #e2e8f0;
+  --primary: #6c5ce7;
   --primary-foreground: #fff;
-  --secondary: #1A1F2B;
-  --secondary-foreground: #E2E8F0;
-  --muted: #1A1F2B;
-  --muted-foreground: #6B7A99;
-  --accent: #6C5CE7;
+  --secondary: #1a1f2b;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1a1f2b;
+  --muted-foreground: #6b7a99;
+  --accent: #6c5ce7;
   --accent-foreground: #fff;
-  --destructive: #FF6B6B;
-  --border: #1E2433;
-  --input: #1E2433;
-  --ring: #6C5CE7;
-  --chart-1: #6C5CE7;
-  --chart-2: #4FC3F7;
-  --chart-3: #00D68F;
-  --chart-4: #FFAA2C;
-  --chart-5: #FF6B6B;
+  --destructive: #ff6b6b;
+  --border: #1e2433;
+  --input: #1e2433;
+  --ring: #6c5ce7;
+  --chart-1: #6c5ce7;
+  --chart-2: #4fc3f7;
+  --chart-3: #00d68f;
+  --chart-4: #ffaa2c;
+  --chart-5: #ff6b6b;
   --sidebar: #131720;
-  --sidebar-foreground: #E2E8F0;
-  --sidebar-primary: #6C5CE7;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #6c5ce7;
   --sidebar-primary-foreground: #fff;
-  --sidebar-accent: #1A1F2B;
-  --sidebar-accent-foreground: #E2E8F0;
-  --sidebar-border: #1E2433;
-  --sidebar-ring: #6C5CE7;
+  --sidebar-accent: #1a1f2b;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: #1e2433;
+  --sidebar-ring: #6c5ce7;
 }
 
 @theme inline {
