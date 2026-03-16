@@ -50,6 +50,33 @@ export interface Task {
   description: string
 }
 
+// ── Board (Kanban) ──
+
+export type BoardColumn =
+  | 'ideas'
+  | 'todo'
+  | 'in-progress'
+  | 'review'
+  | 'shipped'
+
+export type TaskPriority = 'high' | 'medium' | 'low'
+
+export interface BoardTask {
+  id: string
+  title: string
+  type: TaskType
+  column: BoardColumn
+  priority: TaskPriority
+  description: string
+  order: number
+}
+
+export interface BoardColumnDef {
+  id: BoardColumn
+  title: string
+  color: string
+}
+
 // ── Activity ──
 
 export type ActivityAction =

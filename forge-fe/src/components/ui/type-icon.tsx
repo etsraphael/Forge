@@ -19,22 +19,24 @@ const typeConfig: Record<string, { icon: LucideIcon; color: string }> = {
 
 interface TypeIconProps {
   type: string
+  size?: 'sm' | 'default'
   className?: string
 }
 
-export function TypeIcon({ type, className }: TypeIconProps) {
+export function TypeIcon({ type, size = 'default', className }: TypeIconProps) {
   const config = typeConfig[type] ?? typeConfig['system']
   const Icon = config.icon
 
   return (
     <span
       className={cn(
-        'inline-flex size-8 items-center justify-center rounded-lg',
+        'inline-flex items-center justify-center rounded-lg',
+        size === 'sm' ? 'size-5 rounded-md' : 'size-8',
         config.color,
         className,
       )}
     >
-      <Icon className="size-4" />
+      <Icon className={size === 'sm' ? 'size-3' : 'size-4'} />
     </span>
   )
 }
