@@ -1,11 +1,5 @@
-import { Outlet } from 'react-router'
+import { AppShell } from '@/components/app-shell'
 
 export default function RootLayout() {
-  return (
-    <div className="min-h-screen">
-      <main className="p-6">
-        <Outlet />
-      </main>
-    </div>
-  )
+  return <AppShell pendingCount={3} />
 }
