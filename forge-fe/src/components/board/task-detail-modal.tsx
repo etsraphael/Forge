@@ -103,7 +103,12 @@ interface TaskDetailModalProps {
   onDelete?: (taskId: string) => void
 }
 
-export function TaskDetailModal({ task, onClose, onUpdate, onDelete }: TaskDetailModalProps) {
+export function TaskDetailModal({
+  task,
+  onClose,
+  onUpdate,
+  onDelete,
+}: TaskDetailModalProps) {
   const [runningCommand, setRunningCommand] = useState<string | null>(null)
   const [commandOutput, setCommandOutput] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -273,7 +278,9 @@ export function TaskDetailModal({ task, onClose, onUpdate, onDelete }: TaskDetai
                     <select
                       className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                       value={editPriority}
-                      onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
+                      onChange={(e) =>
+                        setEditPriority(e.target.value as TaskPriority)
+                      }
                     >
                       {priorities.map((p) => (
                         <option key={p} value={p}>
@@ -356,7 +363,10 @@ export function TaskDetailModal({ task, onClose, onUpdate, onDelete }: TaskDetai
                           {commandOutput!.split('\n').map((line, i) => {
                             if (line.startsWith('**') && line.endsWith('**')) {
                               return (
-                                <p key={i} className="mt-2 font-semibold first:mt-0">
+                                <p
+                                  key={i}
+                                  className="mt-2 font-semibold first:mt-0"
+                                >
                                   {line.replace(/\*\*/g, '')}
                                 </p>
                               )
@@ -364,14 +374,20 @@ export function TaskDetailModal({ task, onClose, onUpdate, onDelete }: TaskDetai
                             if (line.startsWith('```')) return null
                             if (line.startsWith('- ')) {
                               return (
-                                <p key={i} className="ml-2 text-muted-foreground">
+                                <p
+                                  key={i}
+                                  className="ml-2 text-muted-foreground"
+                                >
                                   {line}
                                 </p>
                               )
                             }
                             if (/^\d+\.\s/.test(line)) {
                               return (
-                                <p key={i} className="ml-2 text-muted-foreground">
+                                <p
+                                  key={i}
+                                  className="ml-2 text-muted-foreground"
+                                >
                                   {line}
                                 </p>
                               )
@@ -409,11 +425,24 @@ export function TaskDetailModal({ task, onClose, onUpdate, onDelete }: TaskDetai
               <div className="flex items-center gap-2">
                 {isEditing ? (
                   <>
-                    <Button size="sm" variant="outline" onClick={cancelEditing} disabled={isSaving}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelEditing}
+                      disabled={isSaving}
+                    >
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={handleSave} disabled={isSaving || !editTitle.trim()}>
-                      {isSaving ? <Loader2 className="size-4 animate-spin" /> : 'Save'}
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={isSaving || !editTitle.trim()}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        'Save'
+                      )}
                     </Button>
                   </>
                 ) : (
