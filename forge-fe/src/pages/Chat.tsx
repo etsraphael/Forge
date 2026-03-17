@@ -12,37 +12,36 @@ interface Message {
 interface Model {
   id: string
   label: string
-  tag: string
   available: boolean
 }
-
-const MODELS: Model[] = [
-  { id: 'llama3.2', label: 'Llama 3.2', tag: 'Local', available: true },
-  { id: 'qwen2.5', label: 'Qwen 2.5', tag: 'Local', available: true },
-  { id: 'deepseek-r1', label: 'DeepSeek R1', tag: 'Local', available: true },
-  { id: 'gpt-4o', label: 'GPT-4o', tag: 'API', available: false },
-  { id: 'claude', label: 'Claude Sonnet', tag: 'API', available: false },
-]
 
 const INITIAL_MESSAGES: Message[] = [
   {
     role: 'assistant',
     content:
       "Hey! I'm your Forge AI assistant. I can help you with tasks, answer questions about your projects, or just chat. What's on your mind?",
-    model: 'llama3.2',
   },
 ]
 
 /* ─── Model Selector ─── */
 interface ModelSelectorProps {
   selected: string
+  models: Model[]
+  loading: boolean
+  ollamaDown: boolean
   onChange: (id: string) => void
 }
 
-function ModelSelector({ selected, onChange }: ModelSelectorProps) {
+function ModelSelector({
+  selected,
+  models,
+  loading,
+  ollamaDown,
+  onChange,
+}: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const current = MODELS.find((m) => m.id === selected)!
+  const current = models.find((m) => m.id === selected)
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -52,73 +51,73 @@ function ModelSelector({ selected, onChange }: ModelSelectorProps) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const buttonLabel = loading
+    ? 'Loading models…'
+    : ollamaDown
+      ? 'Ollama not running'
+      : (current?.label ?? 'Select model')
+
   return (
     <div ref={ref} className="relative self-start">
       <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:border-border-light hover:text-foreground"
+        onClick={() => !loading && !ollamaDown && setOpen(!open)}
+        disabled={loading || ollamaDown}
+        className={cn(
+          'flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 font-mono text-xs text-muted-foreground transition-colors',
+          !loading &&
+            !ollamaDown &&
+            'hover:border-border-light hover:text-foreground',
+          ollamaDown && 'border-red-500/40 text-red-400',
+        )}
       >
         <span
           className={cn(
             'size-1.5 rounded-full',
-            current.available ? 'bg-green' : 'bg-muted-foreground',
+            loading
+              ? 'bg-muted-foreground animate-pulse'
+              : ollamaDown
+                ? 'bg-red-400'
+                : 'bg-green',
           )}
         />
-        {current.label}
-        <span className="opacity-50">{current.tag}</span>
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={cn('transition-transform', open && 'rotate-180')}
-        >
-          <path d="M2 4L5 7L8 4" />
-        </svg>
+        {buttonLabel}
+        {!loading && !ollamaDown && (
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={cn('transition-transform', open && 'rotate-180')}
+          >
+            <path d="M2 4L5 7L8 4" />
+          </svg>
+        )}
       </button>
 
-      {open && (
+      {open && models.length > 0 && (
         <div className="absolute bottom-full left-0 mb-1.5 min-w-[200px] rounded-xl border border-border bg-card p-1.5 shadow-[0_-12px_40px_rgba(0,0,0,0.5)]">
-          {MODELS.map((m) => (
+          {models.map((m) => (
             <button
               key={m.id}
-              disabled={!m.available}
               onClick={() => {
-                if (m.available) {
-                  onChange(m.id)
-                  setOpen(false)
-                }
+                onChange(m.id)
+                setOpen(false)
               }}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 font-mono text-xs transition-colors',
-                m.available
-                  ? 'cursor-pointer hover:bg-surface-hover'
-                  : 'cursor-default opacity-40',
+                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 font-mono text-xs transition-colors cursor-pointer hover:bg-surface-hover',
                 m.id === selected && 'bg-surface-hover',
               )}
             >
-              <span
-                className={cn(
-                  'size-1.5 shrink-0 rounded-full',
-                  m.available ? 'bg-green' : 'bg-muted-foreground',
-                )}
-              />
+              <span className="size-1.5 shrink-0 rounded-full bg-green" />
               <span className="flex-1 text-left text-foreground">
                 {m.label}
               </span>
-              <span
-                className={cn(
-                  'rounded px-1.5 py-0.5 text-[10px]',
-                  m.available
-                    ? 'bg-green-dim text-green'
-                    : 'text-muted-foreground',
-                )}
-              >
-                {m.available ? m.tag : 'Not configured'}
+              <span className="rounded bg-green-dim px-1.5 py-0.5 text-[10px] text-green">
+                Local
               </span>
             </button>
           ))}
@@ -132,31 +131,101 @@ function ModelSelector({ selected, onChange }: ModelSelectorProps) {
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('llama3.2')
+  const [model, setModel] = useState('')
+  const [models, setModels] = useState<Model[]>([])
+  const [loadingModels, setLoadingModels] = useState(true)
+  const [ollamaDown, setOllamaDown] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/ollama/api/tags')
+      .then((r) => r.json())
+      .then((data) => {
+        const fetched: Model[] = (data.models ?? []).map(
+          (m: { name: string }) => ({
+            id: m.name,
+            label: m.name,
+            available: true,
+          }),
+        )
+        setModels(fetched)
+        if (fetched.length > 0) setModel(fetched[0].id)
+      })
+      .catch(() => setOllamaDown(true))
+      .finally(() => setLoadingModels(false))
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  function handleSend() {
-    if (!input.trim()) return
+  async function handleSend() {
+    if (!input.trim() || isGenerating || !model) return
     const text = input.trim()
-    setMessages((prev) => [...prev, { role: 'user', content: text }])
+    const history = [...messages, { role: 'user' as const, content: text }]
+    setMessages(history)
     setInput('')
+    setIsGenerating(true)
 
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content:
-            "This is a placeholder response. Once connected to Ollama at localhost:11434, I'll stream real completions from your local models.",
+    // Placeholder for streaming tokens
+    setMessages((prev) => [...prev, { role: 'assistant', content: '', model }])
+
+    try {
+      const res = await fetch('/ollama/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           model,
-        },
-      ])
-    }, 800)
+          messages: history.map((m) => ({ role: m.role, content: m.content })),
+          stream: true,
+        }),
+      })
+
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const data = JSON.parse(line)
+            if (data.message?.content) {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1]
+                return [
+                  ...prev.slice(0, -1),
+                  { ...last, content: last.content + data.message.content },
+                ]
+              })
+            }
+          } catch {
+            // skip malformed line
+          }
+        }
+      }
+    } catch {
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        return [
+          ...prev.slice(0, -1),
+          { ...last, content: 'Error: could not reach Ollama. Is it running?' },
+        ]
+      })
+    } finally {
+      setIsGenerating(false)
+    }
   }
+
+  const canSend = !!input.trim() && !isGenerating && !!model && !ollamaDown
 
   return (
     <div className="flex h-full flex-col">
@@ -183,7 +252,14 @@ export default function Chat() {
                   : 'rounded-[18px_18px_18px_4px] border border-border bg-card',
               )}
             >
-              <p className="text-sm leading-relaxed">{msg.content}</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                {msg.content}
+                {msg.role === 'assistant' &&
+                  isGenerating &&
+                  i === messages.length - 1 && (
+                    <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
+                  )}
+              </p>
               {msg.model && (
                 <span
                   className={cn(
@@ -204,7 +280,13 @@ export default function Chat() {
 
       {/* Input bar */}
       <div className="flex flex-col gap-2.5 border-t border-border pb-2 pt-4">
-        <ModelSelector selected={model} onChange={setModel} />
+        <ModelSelector
+          selected={model}
+          models={models}
+          loading={loadingModels}
+          ollamaDown={ollamaDown}
+          onChange={setModel}
+        />
 
         <div className="flex items-center gap-2.5">
           <div className="flex flex-1 items-center rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
@@ -223,10 +305,10 @@ export default function Chat() {
           </div>
           <button
             onClick={handleSend}
-            disabled={!input.trim()}
+            disabled={!canSend}
             className={cn(
               'flex size-11 shrink-0 items-center justify-center rounded-xl transition-all',
-              input.trim()
+              canSend
                 ? 'bg-primary text-primary-foreground shadow-[0_4px_16px_var(--color-accent-glow)] hover:opacity-90'
                 : 'cursor-default bg-card text-muted-foreground',
             )}

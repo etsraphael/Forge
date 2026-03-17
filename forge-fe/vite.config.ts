@@ -10,4 +10,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/ollama': {
+        target: 'http://localhost:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('origin', 'http://localhost:11434')
+          })
+        },
+      },
+    },
+  },
 })
