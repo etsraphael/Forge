@@ -8,6 +8,7 @@ const navItems = [
   { to: '/', label: 'Overview', end: true },
   { to: '/tasks', label: 'Tasks' },
   { to: '/insights', label: 'Insights' },
+  { to: '/chat', label: 'Chat' },
 ]
 
 interface NavTabProps {
@@ -56,7 +57,7 @@ interface AppShellProps {
 
 export function AppShell({ pendingCount }: AppShellProps) {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
       {/* Header */}
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
@@ -109,7 +110,7 @@ export function AppShell({ pendingCount }: AppShellProps) {
       </header>
 
       {/* Content */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">
+      <main className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto px-6 py-6">
         <Outlet />
       </main>
     </div>
