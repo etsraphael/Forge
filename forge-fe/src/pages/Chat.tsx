@@ -139,19 +139,30 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch('/ollama/api/tags')
+    fetch('/api/chat/models')
       .then((r) => r.json())
-      .then((data) => {
-        const fetched: Model[] = (data.models ?? []).map(
-          (m: { name: string }) => ({
-            id: m.name,
-            label: m.name,
-            available: true,
-          }),
-        )
-        setModels(fetched)
-        if (fetched.length > 0) setModel(fetched[0].id)
-      })
+      .then(
+        (
+          data: {
+            provider: string
+            status: string
+            models: { id: string; name: string }[]
+          }[],
+        ) => {
+          const fetched: Model[] = data.flatMap((entry) =>
+            entry.status === 'online'
+              ? entry.models.map((m) => ({
+                  id: m.id,
+                  label: m.name,
+                  available: true,
+                }))
+              : [],
+          )
+          if (fetched.length === 0) setOllamaDown(true)
+          setModels(fetched)
+          if (fetched.length > 0) setModel(fetched[0].id)
+        },
+      )
       .catch(() => setOllamaDown(true))
       .finally(() => setLoadingModels(false))
   }, [])
@@ -172,13 +183,12 @@ export default function Chat() {
     setMessages((prev) => [...prev, { role: 'assistant', content: '', model }])
 
     try {
-      const res = await fetch('/ollama/api/chat', {
+      const res = await fetch('/api/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
           messages: history.map((m) => ({ role: m.role, content: m.content })),
-          stream: true,
         }),
       })
 
@@ -195,17 +205,19 @@ export default function Chat() {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
-          if (!line.trim()) continue
+          if (!line.startsWith('data: ')) continue
           try {
-            const data = JSON.parse(line)
-            if (data.message?.content) {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'token' && event.token) {
               setMessages((prev) => {
                 const last = prev[prev.length - 1]
                 return [
                   ...prev.slice(0, -1),
-                  { ...last, content: last.content + data.message.content },
+                  { ...last, content: last.content + event.token },
                 ]
               })
+            } else if (event.type === 'error') {
+              throw new Error(event.error)
             }
           } catch {
             // skip malformed line
@@ -217,7 +229,10 @@ export default function Chat() {
         const last = prev[prev.length - 1]
         return [
           ...prev.slice(0, -1),
-          { ...last, content: 'Error: could not reach Ollama. Is it running?' },
+          {
+            ...last,
+            content: 'Error: could not reach the server. Is it running?',
+          },
         ]
       })
     } finally {

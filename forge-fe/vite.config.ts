@@ -12,15 +12,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/ollama': {
-        target: 'http://localhost:11434',
+      '/api': {
+        target: 'http://localhost:3000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/ollama/, ''),
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.setHeader('origin', 'http://localhost:11434')
-          })
-        },
       },
     },
   },

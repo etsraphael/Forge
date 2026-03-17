@@ -1,0 +1,22 @@
+{
+  "name": "forge",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev":        "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:host":   "concurrently \"npm run dev:server\" \"npm run dev --prefix forge-fe -- --host\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "npm run dev --prefix forge-fe",
+    "build":      "npm run build --prefix forge-fe",
+    "start":      "NODE_ENV=production node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

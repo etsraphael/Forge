@@ -1,2 +1,13 @@
 # Claude
 .claude/settings.local.json
+
+# Database
+forge.db
+forge.db-shm
+forge.db-wal
+
+# Dependencies
+forge-fe/node_modules/
+
+# NPM
+/node_modules/
