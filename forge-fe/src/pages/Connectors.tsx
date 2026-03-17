@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   BrainCircuit,
+  ChevronDown,
   GitBranch,
   Plus,
   Trash2,
@@ -16,6 +17,19 @@ interface Connector {
   provider: string
   enabled: boolean
   config: Record<string, string> & { category: ConnectorCategory }
+}
+
+interface ProviderStatus {
+  provider: string
+  status: 'online' | 'offline' | 'error'
+  models: {
+    id: string
+    name: string
+    parameterSize?: string
+    family?: string
+    quantization?: string
+  }[]
+  error?: string
 }
 
 interface FieldDef {
@@ -217,6 +231,7 @@ interface CategorySectionProps {
   ) => Promise<void>
   onToggle: (id: string, enabled: boolean) => void
   onDelete: (id: string) => void
+  providerStatuses?: ProviderStatus[]
 }
 
 function CategorySection({
@@ -225,8 +240,10 @@ function CategorySection({
   onAdd,
   onToggle,
   onDelete,
+  providerStatuses,
 }: CategorySectionProps) {
   const [adding, setAdding] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const meta = CATEGORY_META[category]
   const Icon = meta.icon
 
@@ -289,64 +306,133 @@ function CategorySection({
           {connectors.map((c, i) => {
             const detail =
               c.config.baseUrl ?? c.config.url ?? c.config.path ?? c.config.repo
+            const ps = providerStatuses?.find((p) => p.provider === c.provider)
+            const isExpanded = expandedId === c.id
+            const statusDot =
+              ps?.status === 'online'
+                ? 'bg-green-500'
+                : ps?.status === 'offline'
+                  ? 'bg-amber-500'
+                  : ps?.status === 'error'
+                    ? 'bg-red-500'
+                    : c.enabled
+                      ? 'bg-green-500'
+                      : 'bg-muted-foreground/40'
             return (
               <div
                 key={c.id}
                 className={cn(
-                  'flex items-center justify-between px-4 py-3 transition-colors hover:bg-muted/30',
                   i < connectors.length - 1 && 'border-b border-border',
                 )}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={cn(
-                      'size-1.5 shrink-0 rounded-full',
-                      c.enabled ? 'bg-green-500' : 'bg-muted-foreground/40',
-                    )}
-                  />
-                  <div className="min-w-0">
-                    <span className="text-sm font-medium text-foreground capitalize">
-                      {c.provider.replace(/-/g, ' ')}
+                <div className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-muted/30">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        'size-1.5 shrink-0 rounded-full',
+                        statusDot,
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground capitalize">
+                          {c.provider.replace(/-/g, ' ')}
+                        </span>
+                        {ps?.status === 'online' && ps.models.length > 0 && (
+                          <button
+                            onClick={() =>
+                              setExpandedId(isExpanded ? null : c.id)
+                            }
+                            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 transition-colors"
+                          >
+                            {ps.models.length} model
+                            {ps.models.length !== 1 && 's'}
+                            <ChevronDown
+                              className={cn(
+                                'size-2.5 transition-transform',
+                                isExpanded && 'rotate-180',
+                              )}
+                            />
+                          </button>
+                        )}
+                        {ps?.status === 'offline' && (
+                          <span className="text-[10px] font-medium text-amber-400">
+                            Offline
+                          </span>
+                        )}
+                        {ps?.status === 'error' && (
+                          <span className="text-[10px] font-medium text-red-400">
+                            Error
+                          </span>
+                        )}
+                      </div>
+                      {detail && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {detail}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1 ml-4">
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none',
+                        c.enabled
+                          ? 'bg-green-500/10 text-green-400'
+                          : 'bg-muted text-muted-foreground',
+                      )}
+                    >
+                      {c.enabled ? 'Active' : 'Inactive'}
                     </span>
-                    {detail && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {detail}
-                      </p>
-                    )}
+                    <button
+                      onClick={() => onToggle(c.id, !c.enabled)}
+                      title={c.enabled ? 'Disable' : 'Enable'}
+                      className={cn(
+                        'ml-1 rounded-md p-1.5 transition-colors',
+                        c.enabled
+                          ? 'text-green-400 hover:bg-green-500/10'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                    >
+                      <Power className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(c.id)}
+                      title="Delete"
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1 ml-4">
-                  <span
-                    className={cn(
-                      'rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none',
-                      c.enabled
-                        ? 'bg-green-500/10 text-green-400'
-                        : 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {c.enabled ? 'Active' : 'Inactive'}
-                  </span>
-                  <button
-                    onClick={() => onToggle(c.id, !c.enabled)}
-                    title={c.enabled ? 'Disable' : 'Enable'}
-                    className={cn(
-                      'ml-1 rounded-md p-1.5 transition-colors',
-                      c.enabled
-                        ? 'text-green-400 hover:bg-green-500/10'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
-                  >
-                    <Power className="size-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onDelete(c.id)}
-                    title="Delete"
-                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
+                {/* Expanded model list */}
+                {isExpanded && ps && ps.models.length > 0 && (
+                  <div className="border-t border-border/50 bg-muted/10 px-4 py-2">
+                    {ps.models.map((m) => (
+                      <div
+                        key={m.id}
+                        className="flex items-center gap-2 py-1.5 text-xs"
+                      >
+                        <span className="size-1 shrink-0 rounded-full bg-violet-400/60" />
+                        <span className="font-medium text-foreground">
+                          {m.name}
+                        </span>
+                        {m.parameterSize && (
+                          <span className="text-muted-foreground">
+                            {m.parameterSize}
+                          </span>
+                        )}
+                        {m.quantization && (
+                          <span className="text-muted-foreground/60">
+                            {m.quantization}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -375,17 +461,102 @@ function CategorySection({
           </div>
         )
       )}
+
+      {/* Auto-detected providers */}
+      {providerStatuses &&
+        providerStatuses.length > 0 &&
+        (() => {
+          const configuredNames = new Set(connectors.map((c) => c.provider))
+          const unmatched = providerStatuses.filter(
+            (ps) => ps.status === 'online' && !configuredNames.has(ps.provider),
+          )
+          if (unmatched.length === 0) return null
+          return (
+            <div className="border-t border-border px-4 py-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Auto-detected
+              </p>
+              {unmatched.map((ps) => {
+                const isExpanded = expandedId === `auto-${ps.provider}`
+                return (
+                  <div key={ps.provider}>
+                    <div className="flex items-center gap-3 py-2">
+                      <div className="size-1.5 shrink-0 rounded-full bg-green-500" />
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-foreground capitalize">
+                          {ps.provider}
+                        </span>
+                        <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold leading-none text-green-400">
+                          Online
+                        </span>
+                        {ps.models.length > 0 && (
+                          <button
+                            onClick={() =>
+                              setExpandedId(
+                                isExpanded ? null : `auto-${ps.provider}`,
+                              )
+                            }
+                            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 transition-colors"
+                          >
+                            {ps.models.length} model
+                            {ps.models.length !== 1 && 's'}
+                            <ChevronDown
+                              className={cn(
+                                'size-2.5 transition-transform',
+                                isExpanded && 'rotate-180',
+                              )}
+                            />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {isExpanded && ps.models.length > 0 && (
+                      <div className="mb-1 ml-4 rounded-lg bg-muted/10 px-3 py-1.5">
+                        {ps.models.map((m) => (
+                          <div
+                            key={m.id}
+                            className="flex items-center gap-2 py-1.5 text-xs"
+                          >
+                            <span className="size-1 shrink-0 rounded-full bg-violet-400/60" />
+                            <span className="font-medium text-foreground">
+                              {m.name}
+                            </span>
+                            {m.parameterSize && (
+                              <span className="text-muted-foreground">
+                                {m.parameterSize}
+                              </span>
+                            )}
+                            {m.quantization && (
+                              <span className="text-muted-foreground/60">
+                                {m.quantization}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
     </div>
   )
 }
 
 export default function Connectors() {
   const [connectors, setConnectors] = useState<Connector[]>([])
+  const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([])
 
   useEffect(() => {
     fetch('/api/connectors')
       .then((r) => r.json())
       .then(setConnectors)
+      .catch(console.error)
+    fetch('/api/chat/models')
+      .then((r) => r.json())
+      .then(setProviderStatuses)
       .catch(console.error)
   }, [])
 
@@ -454,6 +625,7 @@ export default function Connectors() {
             onAdd={handleAdd}
             onToggle={handleToggle}
             onDelete={handleDelete}
+            providerStatuses={cat === 'llm' ? providerStatuses : undefined}
           />
         ))}
       </div>
