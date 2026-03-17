@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   BrainCircuit,
   GitBranch,
-  Webhook,
   Plus,
   Trash2,
   Power,
@@ -10,7 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type ConnectorCategory = 'llm' | 'repository' | 'external'
+type ConnectorCategory = 'llm' | 'repository'
 
 interface Connector {
   id: string
@@ -89,42 +88,6 @@ const TEMPLATES: Record<ConnectorCategory, Template[]> = {
       ],
     },
   ],
-  external: [
-    {
-      id: 'webhook',
-      label: 'Webhook',
-      fields: [
-        {
-          key: 'url',
-          label: 'URL',
-          placeholder: 'https://example.com/webhook',
-        },
-        {
-          key: 'secret',
-          label: 'Secret',
-          placeholder: 'whsec_...',
-          type: 'password',
-        },
-      ],
-    },
-    {
-      id: 'rest-api',
-      label: 'Generic REST API',
-      fields: [
-        {
-          key: 'url',
-          label: 'Base URL',
-          placeholder: 'https://api.example.com',
-        },
-        {
-          key: 'apiKey',
-          label: 'API Key',
-          placeholder: 'sk_...',
-          type: 'password',
-        },
-      ],
-    },
-  ],
 }
 
 const CATEGORY_META: Record<
@@ -150,13 +113,6 @@ const CATEGORY_META: Record<
     description: 'Git repos the LLM can read and analyze',
     color: 'text-sky-400',
     iconBg: 'bg-sky-500/10',
-  },
-  external: {
-    label: 'External Services',
-    icon: Webhook,
-    description: 'Webhooks and third-party APIs',
-    color: 'text-amber-400',
-    iconBg: 'bg-amber-500/10',
   },
 }
 
@@ -478,8 +434,7 @@ export default function Connectors() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Connectors</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Configure integrations for LLM providers, code repositories, and
-            external services.
+            Configure integrations for LLM providers and code repositories.
           </p>
         </div>
         {connectors.length > 0 && (
@@ -491,18 +446,16 @@ export default function Connectors() {
       </div>
 
       <div className="mt-6 space-y-4">
-        {(['llm', 'repository', 'external'] as ConnectorCategory[]).map(
-          (cat) => (
-            <CategorySection
-              key={cat}
-              category={cat}
-              connectors={byCategory(cat)}
-              onAdd={handleAdd}
-              onToggle={handleToggle}
-              onDelete={handleDelete}
-            />
-          ),
-        )}
+        {(['llm', 'repository'] as ConnectorCategory[]).map((cat) => (
+          <CategorySection
+            key={cat}
+            category={cat}
+            connectors={byCategory(cat)}
+            onAdd={handleAdd}
+            onToggle={handleToggle}
+            onDelete={handleDelete}
+          />
+        ))}
       </div>
     </div>
   )
