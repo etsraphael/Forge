@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
+import { GitHubService } from "../services/github.js";
 
 const router = Router();
 
@@ -60,6 +61,46 @@ router.patch("/:id", (req, res) => {
 
   const updated = db.prepare("SELECT * FROM provider_settings WHERE id = ?").get(id);
   res.json({ ...updated, config: JSON.parse(updated.config), enabled: updated.enabled === 1 });
+});
+
+// GET /api/connectors/:id/status — live connection check
+router.get("/:id/status", async (req, res) => {
+  const db = req.app.get("db");
+  const row = db.prepare("SELECT * FROM provider_settings WHERE id = ?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Connector not found" });
+
+  const config = JSON.parse(row.config || "{}");
+
+  if (config.category === "repository" && row.provider === "github") {
+    if (!config.token || !config.repo) {
+      return res.json({ status: "error", detail: "Missing token or repo in config" });
+    }
+    const service = new GitHubService(config.token, config.repo);
+    const result = await service.testConnection();
+    if (result.valid) {
+      return res.json({
+        status: "online",
+        detail: `Connected as @${result.user} to ${result.repoInfo.fullName}`,
+      });
+    }
+    return res.json({ status: "error", detail: result.error });
+  }
+
+  if (config.category === "llm") {
+    // For LLM connectors, try reaching the base URL
+    try {
+      const baseUrl = config.baseUrl || "http://localhost:11434";
+      const response = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      if (response.ok) {
+        return res.json({ status: "online", detail: `Reachable at ${baseUrl}` });
+      }
+      return res.json({ status: "offline", detail: `Not reachable at ${baseUrl}` });
+    } catch {
+      return res.json({ status: "offline", detail: "Connection failed" });
+    }
+  }
+
+  res.json({ status: "offline", detail: "Unknown connector type" });
 });
 
 // DELETE /api/connectors/:id

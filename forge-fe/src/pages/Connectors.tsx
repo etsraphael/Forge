@@ -7,6 +7,9 @@ import {
   Trash2,
   Power,
   X,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -141,11 +144,44 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0])
   const [fields, setFields] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [testResult, setTestResult] = useState<{
+    valid: boolean
+    detail: string
+  } | null>(null)
+  const [testing, setTesting] = useState(false)
 
   const handleTemplateChange = (id: string) => {
     const t = templates.find((t) => t.id === id)!
     setSelectedTemplate(t)
     setFields({})
+    setTestResult(null)
+  }
+
+  const isGitHub = category === 'repository' && selectedTemplate.id === 'github'
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/github/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: fields.token, repo: fields.repo }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setTestResult({
+          valid: true,
+          detail: `Connected as @${data.user} to ${data.repoInfo.fullName}`,
+        })
+      } else {
+        setTestResult({ valid: false, detail: data.error || 'Connection failed' })
+      }
+    } catch {
+      setTestResult({ valid: false, detail: 'Network error' })
+    } finally {
+      setTesting(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,6 +236,25 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
         ))}
       </div>
 
+      {/* Test result */}
+      {isGitHub && testResult && (
+        <div
+          className={cn(
+            'mx-4 mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium',
+            testResult.valid
+              ? 'bg-green-500/10 text-green-400'
+              : 'bg-red-500/10 text-red-400',
+          )}
+        >
+          {testResult.valid ? (
+            <CheckCircle2 className="size-3.5 shrink-0" />
+          ) : (
+            <XCircle className="size-3.5 shrink-0" />
+          )}
+          {testResult.detail}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/10 px-4 py-3">
         <button
@@ -209,6 +264,17 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
         >
           Cancel
         </button>
+        {isGitHub && (
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing || !fields.token || !fields.repo}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            {testing && <Loader2 className="size-3.5 animate-spin" />}
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+        )}
         <button
           type="submit"
           disabled={saving}
@@ -232,6 +298,7 @@ interface CategorySectionProps {
   onToggle: (id: string, enabled: boolean) => void
   onDelete: (id: string) => void
   providerStatuses?: ProviderStatus[]
+  connectorStatuses?: Record<string, { status: string; detail: string }>
 }
 
 function CategorySection({
@@ -241,6 +308,7 @@ function CategorySection({
   onToggle,
   onDelete,
   providerStatuses,
+  connectorStatuses,
 }: CategorySectionProps) {
   const [adding, setAdding] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -307,13 +375,15 @@ function CategorySection({
             const detail =
               c.config.baseUrl ?? c.config.url ?? c.config.path ?? c.config.repo
             const ps = providerStatuses?.find((p) => p.provider === c.provider)
+            const cs = connectorStatuses?.[c.id]
             const isExpanded = expandedId === c.id
+            const resolvedStatus = cs?.status ?? ps?.status
             const statusDot =
-              ps?.status === 'online'
+              resolvedStatus === 'online'
                 ? 'bg-green-500'
-                : ps?.status === 'offline'
+                : resolvedStatus === 'offline'
                   ? 'bg-amber-500'
-                  : ps?.status === 'error'
+                  : resolvedStatus === 'error'
                     ? 'bg-red-500'
                     : c.enabled
                       ? 'bg-green-500'
@@ -355,14 +425,19 @@ function CategorySection({
                             />
                           </button>
                         )}
-                        {ps?.status === 'offline' && (
+                        {resolvedStatus === 'online' && cs?.detail && (
+                          <span className="text-[10px] font-medium text-green-400">
+                            {cs.detail}
+                          </span>
+                        )}
+                        {resolvedStatus === 'offline' && (
                           <span className="text-[10px] font-medium text-amber-400">
                             Offline
                           </span>
                         )}
-                        {ps?.status === 'error' && (
+                        {resolvedStatus === 'error' && (
                           <span className="text-[10px] font-medium text-red-400">
-                            Error
+                            {cs?.detail || 'Error'}
                           </span>
                         )}
                       </div>
@@ -548,11 +623,30 @@ function CategorySection({
 export default function Connectors() {
   const [connectors, setConnectors] = useState<Connector[]>([])
   const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([])
+  const [connectorStatuses, setConnectorStatuses] = useState<
+    Record<string, { status: string; detail: string }>
+  >({})
 
   useEffect(() => {
     fetch('/api/connectors')
       .then((r) => r.json())
-      .then(setConnectors)
+      .then((data: Connector[]) => {
+        setConnectors(data)
+        // Fetch status for each enabled repository connector
+        data
+          .filter((c) => c.config.category === 'repository' && c.enabled)
+          .forEach((c) => {
+            fetch(`/api/connectors/${c.id}/status`)
+              .then((r) => r.json())
+              .then((s) =>
+                setConnectorStatuses((prev) => ({
+                  ...prev,
+                  [c.id]: s,
+                })),
+              )
+              .catch(console.error)
+          })
+      })
       .catch(console.error)
     fetch('/api/chat/models')
       .then((r) => r.json())
@@ -626,6 +720,7 @@ export default function Connectors() {
             onToggle={handleToggle}
             onDelete={handleDelete}
             providerStatuses={cat === 'llm' ? providerStatuses : undefined}
+            connectorStatuses={cat === 'repository' ? connectorStatuses : undefined}
           />
         ))}
       </div>

@@ -24,7 +24,6 @@ interface AiCommand {
   label: string
   icon: LucideIcon
   description: string
-  mockResponse: (task: BoardTask) => string
 }
 
 const aiCommands: AiCommand[] = [
@@ -33,40 +32,30 @@ const aiCommands: AiCommand[] = [
     label: 'Generate subtasks',
     icon: ListTree,
     description: 'Break into smaller steps',
-    mockResponse: (task) =>
-      `**Subtasks for "${task.title}":**\n\n1. Define scope and success criteria\n2. Research existing solutions and patterns\n3. Create initial prototype\n4. Review with stakeholders\n5. Iterate based on feedback\n6. Final QA and ship`,
   },
   {
     id: 'draft',
     label: 'Draft content',
     icon: PenLine,
     description: 'Generate a first draft',
-    mockResponse: (task) =>
-      `**Draft for "${task.title}":**\n\nHi team,\n\nI've been working on ${task.description.toLowerCase()} and wanted to share an initial approach.\n\nKey points:\n- Identified 3 high-priority areas to focus on\n- Estimated 2-week timeline for initial delivery\n- Will need input from design by end of week\n\nLet me know your thoughts.`,
   },
   {
     id: 'research',
     label: 'Research & summarize',
     icon: Search,
     description: 'Research and find key insights',
-    mockResponse: (task) =>
-      `**Research Summary:**\n\n**Topic:** ${task.title}\n\n**Key Findings:**\n- Market trend shows 34% YoY growth in this area\n- Top 3 competitors have shipped similar features in Q1\n- User surveys indicate 78% demand for this capability\n\n**Recommendation:** Prioritize this initiative — strong signal from both market data and user feedback.`,
   },
   {
     id: 'next-steps',
     label: 'Suggest next steps',
     icon: Lightbulb,
     description: 'Get AI recommendations',
-    mockResponse: (task) =>
-      `**Suggested Next Steps for "${task.title}":**\n\n1. **Immediate:** Schedule a 30-min kickoff with the team\n2. **This week:** Gather requirements and create a brief\n3. **Next sprint:** Begin implementation of core functionality\n4. **Blocker to resolve:** Confirm budget allocation with leadership\n\n**Risk:** Timeline may slip if we don't lock requirements by Friday.`,
   },
   {
     id: 'code',
     label: 'Generate code',
     icon: Code,
     description: 'Write implementation code',
-    mockResponse: (task) =>
-      `**Generated implementation for "${task.title}":**\n\n\`\`\`typescript\nexport async function execute() {\n  // 1. Fetch data sources\n  const data = await fetchSources();\n\n  // 2. Process and analyze\n  const results = analyze(data, {\n    type: "${task.type}",\n    priority: "${task.priority}",\n  });\n\n  // 3. Generate output\n  return formatResults(results);\n}\n\`\`\`\n\nReady to integrate — run \`forge deploy\` to push to staging.`,
   },
 ]
 
@@ -178,14 +167,27 @@ export function TaskDetailModal({
     }
   }
 
-  function handleRunCommand(cmd: AiCommand) {
+  async function handleRunCommand(cmd: AiCommand) {
     setRunningCommand(cmd.id)
     setCommandOutput(null)
 
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/chat/task-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: task!.id, command: cmd.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCommandOutput(`**Error:** ${data.error || 'Something went wrong'}`)
+      } else {
+        setCommandOutput(data.content)
+      }
+    } catch {
+      setCommandOutput('**Error:** Failed to reach the server. Is the backend running?')
+    } finally {
       setRunningCommand(null)
-      setCommandOutput(cmd.mockResponse(task!))
-    }, 1500)
+    }
   }
 
   function handleClose() {
