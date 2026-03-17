@@ -9,6 +9,7 @@ const navItems = [
   { to: '/tasks', label: 'Tasks' },
   { to: '/insights', label: 'Insights' },
   { to: '/chat', label: 'Chat' },
+  { to: '/connectors', label: 'Connectors' },
 ]
 
 interface NavTabProps {
