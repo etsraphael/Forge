@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Bot } from 'lucide-react'
+import { Send, Bot, Trash2, Plus, MessageSquare } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -15,6 +15,12 @@ interface Model {
   available: boolean
 }
 
+interface ChatSession {
+  id: string
+  title: string
+  updated_at: string
+}
+
 const INITIAL_MESSAGES: Message[] = [
   {
     role: 'assistant',
@@ -22,6 +28,91 @@ const INITIAL_MESSAGES: Message[] = [
       "Hey! I'm your Forge AI assistant. I can help you with tasks, answer questions about your projects, or just chat. What's on your mind?",
   },
 ]
+
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return days === 1 ? 'yesterday' : `${days}d ago`
+}
+
+/* ─── Session Sidebar ─── */
+interface SessionSidebarProps {
+  sessions: ChatSession[]
+  activeId: string | null
+  onSelect: (id: string) => void
+  onDelete: (id: string) => void
+  onNew: () => void
+}
+
+function SessionSidebar({
+  sessions,
+  activeId,
+  onSelect,
+  onDelete,
+  onNew,
+}: SessionSidebarProps) {
+  return (
+    <div className="flex w-56 shrink-0 flex-col border-r border-border">
+      <div className="flex items-center justify-between px-3 py-3">
+        <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          History
+        </span>
+        <button
+          onClick={onNew}
+          title="New chat"
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+        >
+          <Plus className="size-3.5" />
+        </button>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pb-2">
+        {sessions.length === 0 ? (
+          <p className="px-2 py-4 text-center font-mono text-[11px] text-muted-foreground/60">
+            No history yet
+          </p>
+        ) : (
+          sessions.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => onSelect(s.id)}
+              className={cn(
+                'group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors',
+                s.id === activeId
+                  ? 'bg-surface-hover text-foreground'
+                  : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
+              )}
+            >
+              <MessageSquare className="mt-0.5 size-3 shrink-0 opacity-50" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs leading-snug">
+                  {s.title ?? 'Untitled'}
+                </p>
+                <p className="mt-0.5 font-mono text-[10px] opacity-50">
+                  {relativeTime(s.updated_at)}
+                </p>
+              </div>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(s.id)
+                }}
+                title="Delete"
+                className="mt-0.5 shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+              >
+                <Trash2 className="size-3" />
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
 
 /* ─── Model Selector ─── */
 interface ModelSelectorProps {
@@ -136,6 +227,8 @@ export default function Chat() {
   const [loadingModels, setLoadingModels] = useState(true)
   const [ollamaDown, setOllamaDown] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -168,8 +261,56 @@ export default function Chat() {
   }, [])
 
   useEffect(() => {
+    fetch('/api/chat/sessions')
+      .then((r) => r.json())
+      .then((data: ChatSession[]) => setSessions(data))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  function loadSession(id: string) {
+    fetch(`/api/chat/sessions/${id}/messages`)
+      .then((r) => r.json())
+      .then(
+        (
+          rows: {
+            role: 'user' | 'assistant' | 'system'
+            content: string
+            model?: string
+          }[],
+        ) => {
+          setMessages(
+            rows
+              .filter((r) => r.role !== 'system')
+              .map((r) => ({
+                role: r.role as 'user' | 'assistant',
+                content: r.content,
+                model: r.model,
+              })),
+          )
+          setActiveSessionId(id)
+        },
+      )
+      .catch(() => {})
+  }
+
+  function deleteSession(id: string) {
+    fetch(`/api/chat/sessions/${id}`, { method: 'DELETE' })
+      .then(() => {
+        setSessions((prev) => prev.filter((s) => s.id !== id))
+        if (activeSessionId === id) startNewChat()
+      })
+      .catch(() => {})
+  }
+
+  function startNewChat() {
+    setMessages(INITIAL_MESSAGES)
+    setActiveSessionId(null)
+    setInput('')
+  }
 
   async function handleSend() {
     if (!input.trim() || isGenerating || !model) return
@@ -179,7 +320,6 @@ export default function Chat() {
     setInput('')
     setIsGenerating(true)
 
-    // Placeholder for streaming tokens
     setMessages((prev) => [...prev, { role: 'assistant', content: '', model }])
 
     try {
@@ -189,6 +329,7 @@ export default function Chat() {
         body: JSON.stringify({
           model,
           messages: history.map((m) => ({ role: m.role, content: m.content })),
+          session_id: activeSessionId ?? undefined,
         }),
       })
 
@@ -197,6 +338,7 @@ export default function Chat() {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let savedSessionId: string | null = null
 
       while (true) {
         const { done, value } = await reader.read()
@@ -208,7 +350,31 @@ export default function Chat() {
           if (!line.startsWith('data: ')) continue
           try {
             const event = JSON.parse(line.slice(6))
-            if (event.type === 'token' && event.token) {
+            if (event.type === 'session' && event.session_id) {
+              savedSessionId = event.session_id
+              setActiveSessionId(event.session_id)
+              // Prepend new session to sidebar if it's new
+              if (!activeSessionId) {
+                const title = text.slice(0, 60)
+                setSessions((prev) => [
+                  {
+                    id: event.session_id,
+                    title,
+                    updated_at: new Date().toISOString(),
+                  },
+                  ...prev,
+                ])
+              } else {
+                // Update updated_at for existing session
+                setSessions((prev) =>
+                  prev.map((s) =>
+                    s.id === event.session_id
+                      ? { ...s, updated_at: new Date().toISOString() }
+                      : s,
+                  ),
+                )
+              }
+            } else if (event.type === 'token' && event.token) {
               setMessages((prev) => {
                 const last = prev[prev.length - 1]
                 return [
@@ -223,6 +389,17 @@ export default function Chat() {
             // skip malformed line
           }
         }
+      }
+
+      // Move the active session to top of list after completion
+      if (savedSessionId) {
+        setSessions((prev) => {
+          const idx = prev.findIndex((s) => s.id === savedSessionId)
+          if (idx <= 0) return prev
+          const updated = [...prev]
+          const [item] = updated.splice(idx, 1)
+          return [{ ...item, updated_at: new Date().toISOString() }, ...updated]
+        })
       }
     } catch {
       setMessages((prev) => {
@@ -243,93 +420,105 @@ export default function Chat() {
   const canSend = !!input.trim() && !isGenerating && !!model && !ollamaDown
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Messages */}
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-5">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              'flex items-start gap-3',
-              msg.role === 'user' ? 'flex-row-reverse' : 'flex-row',
-            )}
-          >
-            {msg.role === 'assistant' && (
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-purple-500">
-                <Bot className="size-4 text-white" />
-              </div>
-            )}
+    <div className="flex h-full overflow-hidden">
+      {/* Sidebar */}
+      <SessionSidebar
+        sessions={sessions}
+        activeId={activeSessionId}
+        onSelect={loadSession}
+        onDelete={deleteSession}
+        onNew={startNewChat}
+      />
+
+      {/* Chat panel */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Messages */}
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-5 px-4">
+          {messages.map((msg, i) => (
             <div
+              key={i}
               className={cn(
-                'max-w-[72%] px-4 py-3 sm:max-w-[60%]',
-                msg.role === 'user'
-                  ? 'rounded-[18px_18px_4px_18px] bg-primary text-primary-foreground'
-                  : 'rounded-[18px_18px_18px_4px] border border-border bg-card',
+                'flex items-start gap-3',
+                msg.role === 'user' ? 'flex-row-reverse' : 'flex-row',
               )}
             >
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                {msg.content}
-                {msg.role === 'assistant' &&
-                  isGenerating &&
-                  i === messages.length - 1 && (
-                    <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
-                  )}
-              </p>
-              {msg.model && (
-                <span
-                  className={cn(
-                    'mt-1.5 block font-mono text-[10px]',
-                    msg.role === 'user'
-                      ? 'text-primary-foreground/50'
-                      : 'text-muted-foreground',
-                  )}
-                >
-                  {msg.model}
-                </span>
+              {msg.role === 'assistant' && (
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-purple-500">
+                  <Bot className="size-4 text-white" />
+                </div>
               )}
+              <div
+                className={cn(
+                  'max-w-[72%] px-4 py-3 sm:max-w-[60%]',
+                  msg.role === 'user'
+                    ? 'rounded-[18px_18px_4px_18px] bg-primary text-primary-foreground'
+                    : 'rounded-[18px_18px_18px_4px] border border-border bg-card',
+                )}
+              >
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {msg.content}
+                  {msg.role === 'assistant' &&
+                    isGenerating &&
+                    i === messages.length - 1 && (
+                      <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
+                    )}
+                </p>
+                {msg.model && (
+                  <span
+                    className={cn(
+                      'mt-1.5 block font-mono text-[10px]',
+                      msg.role === 'user'
+                        ? 'text-primary-foreground/50'
+                        : 'text-muted-foreground',
+                    )}
+                  >
+                    {msg.model}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
 
-      {/* Input bar */}
-      <div className="flex flex-col gap-2.5 border-t border-border pb-2 pt-4">
-        <ModelSelector
-          selected={model}
-          models={models}
-          loading={loadingModels}
-          ollamaDown={ollamaDown}
-          onChange={setModel}
-        />
+        {/* Input bar */}
+        <div className="flex flex-col gap-2.5 border-t border-border px-4 pb-2 pt-4">
+          <ModelSelector
+            selected={model}
+            models={models}
+            loading={loadingModels}
+            ollamaDown={ollamaDown}
+            onChange={setModel}
+          />
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex flex-1 items-center rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
-                }
-              }}
-              placeholder="Ask anything about your project…"
-              className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            />
+          <div className="flex items-center gap-2.5">
+            <div className="flex flex-1 items-center rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
+                placeholder="Ask anything about your project…"
+                className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              className={cn(
+                'flex size-11 shrink-0 items-center justify-center rounded-xl transition-all',
+                canSend
+                  ? 'bg-primary text-primary-foreground shadow-[0_4px_16px_var(--color-accent-glow)] hover:opacity-90'
+                  : 'cursor-default bg-card text-muted-foreground',
+              )}
+            >
+              <Send className="size-4" />
+            </button>
           </div>
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            className={cn(
-              'flex size-11 shrink-0 items-center justify-center rounded-xl transition-all',
-              canSend
-                ? 'bg-primary text-primary-foreground shadow-[0_4px_16px_var(--color-accent-glow)] hover:opacity-90'
-                : 'cursor-default bg-card text-muted-foreground',
-            )}
-          >
-            <Send className="size-4" />
-          </button>
         </div>
       </div>
     </div>
