@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -14,15 +14,44 @@ import {
 import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
 
 import type { BoardTask, BoardColumn } from '@/types'
-import { boardColumns, boardTasks as initialTasks } from '@/mock'
+import { boardColumns } from '@/mock'
 import { KanbanColumn } from './kanban-column'
 import { KanbanCard } from './kanban-card'
 import { TaskDetailModal } from './task-detail-modal'
 
+interface RawTask {
+  id: string
+  title: string
+  type: string
+  column_id: string
+  priority: string
+  description: string
+  sort_order: number
+}
+
+function mapTask(raw: RawTask): BoardTask {
+  return {
+    id: raw.id,
+    title: raw.title,
+    type: raw.type as BoardTask['type'],
+    column: raw.column_id as BoardColumn,
+    priority: raw.priority as BoardTask['priority'],
+    description: raw.description,
+    order: raw.sort_order,
+  }
+}
+
 export function KanbanBoard() {
-  const [tasks, setTasks] = useState<BoardTask[]>(initialTasks)
+  const [tasks, setTasks] = useState<BoardTask[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null)
+
+  useEffect(() => {
+    fetch('/api/tasks')
+      .then((r) => r.json())
+      .then((data: RawTask[]) => setTasks(data.map(mapTask)))
+      .catch(console.error)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -60,7 +89,6 @@ export function KanbanBoard() {
 
     const activeColumn = findColumnOfTask(activeTaskId)
 
-    // Determine target column: either directly a column id or the column of the hovered task
     const isOverColumn = boardColumns.some((c) => c.id === overId)
     const overColumn = isOverColumn
       ? (overId as BoardColumn)
@@ -68,7 +96,6 @@ export function KanbanBoard() {
 
     if (!activeColumn || !overColumn || activeColumn === overColumn) return
 
-    // Move task to new column
     setTasks((prev) => {
       const targetTasks = prev.filter(
         (t) => t.column === overColumn && t.id !== activeTaskId,
@@ -95,13 +122,14 @@ export function KanbanBoard() {
     const activeColumn = findColumnOfTask(activeTaskId)
     const isOverColumn = boardColumns.some((c) => c.id === overId)
 
-    // If dropped on a column directly (not on a task), we're done — already moved in handleDragOver
-    if (isOverColumn) return
+    if (isOverColumn) {
+      persistReorder(tasks)
+      return
+    }
 
     const overColumn = findColumnOfTask(overId)
     if (!activeColumn || !overColumn || activeColumn !== overColumn) return
 
-    // Reorder within same column
     setTasks((prev) => {
       const columnTasks = prev
         .filter((t) => t.column === activeColumn)
@@ -113,14 +141,54 @@ export function KanbanBoard() {
       if (oldIndex === newIndex) return prev
 
       const reordered = arrayMove(columnTasks, oldIndex, newIndex)
-      const reorderedWithOrder = reordered.map((t, i) => ({
-        ...t,
-        order: i,
-      }))
+      const reorderedWithOrder = reordered.map((t, i) => ({ ...t, order: i }))
 
       const otherTasks = prev.filter((t) => t.column !== activeColumn)
-      return [...otherTasks, ...reorderedWithOrder]
+      const next = [...otherTasks, ...reorderedWithOrder]
+      persistReorder(next)
+      return next
     })
+  }
+
+  function persistReorder(currentTasks: BoardTask[]) {
+    const payload = currentTasks.map((t) => ({
+      id: t.id,
+      column_id: t.column,
+      sort_order: t.order,
+    }))
+    fetch('/api/tasks/reorder', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: payload }),
+    }).catch(console.error)
+  }
+
+  async function handleAddTask(columnId: BoardColumn) {
+    const columnTasks = tasks.filter((t) => t.column === columnId)
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'New task',
+        column_id: columnId,
+        sort_order: columnTasks.length,
+      }),
+    })
+    if (!res.ok) return
+    const raw: RawTask = await res.json()
+    const newTask = mapTask(raw)
+    setTasks((prev) => [...prev, newTask])
+    setSelectedTask(newTask)
+  }
+
+  function handleTaskUpdate(updated: BoardTask) {
+    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    setSelectedTask(updated)
+  }
+
+  function handleTaskDelete(taskId: string) {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    setSelectedTask(null)
   }
 
   return (
@@ -139,6 +207,7 @@ export function KanbanBoard() {
               column={col}
               tasks={getColumnTasks(col.id)}
               onTaskClick={setSelectedTask}
+              onAddTask={handleAddTask}
             />
           ))}
         </div>
@@ -151,6 +220,8 @@ export function KanbanBoard() {
       <TaskDetailModal
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
+        onUpdate={handleTaskUpdate}
+        onDelete={handleTaskDelete}
       />
     </>
   )

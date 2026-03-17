@@ -1,19 +1,22 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { Plus } from 'lucide-react'
 
-import type { BoardColumnDef, BoardTask } from '@/types'
+import type { BoardColumn, BoardColumnDef, BoardTask } from '@/types'
 import { KanbanCard } from './kanban-card'
 
 interface KanbanColumnProps {
   column: BoardColumnDef
   tasks: BoardTask[]
   onTaskClick?: (task: BoardTask) => void
+  onAddTask?: (columnId: BoardColumn) => void
 }
 
 export function KanbanColumn({
   column,
   tasks,
   onTaskClick,
+  onAddTask,
 }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({ id: column.id })
   const taskIds = tasks.map((t) => t.id)
@@ -30,6 +33,15 @@ export function KanbanColumn({
         <span className="ml-auto text-xs text-muted-foreground">
           {tasks.length}
         </span>
+        {onAddTask && (
+          <button
+            onClick={() => onAddTask(column.id)}
+            className="rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Add task"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Drop zone */}

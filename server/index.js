@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 import { initDB } from "./db.js";
 import chatRouter from "./routes/chat.js";
+import tasksRouter from "./routes/tasks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
@@ -22,6 +23,7 @@ app.set("db", db);
 app.set("ollamaUrl", ollamaUrl);
 
 app.use("/api/chat", chatRouter);
+app.use("/api/tasks", tasksRouter);
 
 app.get("/api/health", async (_req, res) => {
   try {
