@@ -1,11 +1,11 @@
-import { Router } from "express";
-import { v4 as uuidv4 } from "uuid";
-import { OllamaProvider } from "../providers/ollama.js";
-import { buildContext } from "../services/context-builder.js";
-import { detectRelevance } from "../services/relevance.js";
-import { getTaskPrompt } from "../services/task-prompts.js";
-import { parseActions } from "../services/action-parser.js";
-import { executeAction } from "../services/action-executor.js";
+import { Router } from 'express'
+import { v4 as uuidv4 } from 'uuid'
+import { OllamaProvider } from '../providers/ollama.js'
+import { buildContext } from '../services/context-builder.js'
+import { detectRelevance } from '../services/relevance.js'
+import { getTaskPrompt } from '../services/task-prompts.js'
+import { parseActions } from '../services/action-parser.js'
+import { executeAction } from '../services/action-executor.js'
 // import { OpenRouterProvider } from "../providers/openrouter.js";
 // import { OpenAIProvider } from "../providers/openai.js";
 // import { AnthropicProvider } from "../providers/anthropic.js";
@@ -14,213 +14,239 @@ import { executeAction } from "../services/action-executor.js";
 function getProviders(ollamaUrl) {
   return {
     ollama: new OllamaProvider({ baseUrl: ollamaUrl }),
-  };
+  }
 }
 
-const router = Router();
+const router = Router()
 
 // GET /api/chat/models
-router.get("/models", async (req, res) => {
-  const providers = getProviders(req.app.get("ollamaUrl"));
+router.get('/models', async (req, res) => {
+  const providers = getProviders(req.app.get('ollamaUrl'))
   const results = await Promise.all(
     Object.entries(providers).map(async ([providerName, provider]) => {
       try {
-        const available = await provider.isAvailable();
+        const available = await provider.isAvailable()
         if (!available) {
-          return { provider: providerName, status: "offline", models: [] };
+          return { provider: providerName, status: 'offline', models: [] }
         }
-        const models = await provider.listModels();
-        return { provider: providerName, status: "online", models };
+        const models = await provider.listModels()
+        return { provider: providerName, status: 'online', models }
       } catch (err) {
-        return { provider: providerName, status: "error", models: [], error: err.message };
+        return {
+          provider: providerName,
+          status: 'error',
+          models: [],
+          error: err.message,
+        }
       }
-    })
-  );
-  res.json(results);
-});
+    }),
+  )
+  res.json(results)
+})
 
 // POST /api/chat/completions  (SSE)
-router.post("/completions", async (req, res) => {
+router.post('/completions', async (req, res) => {
   const {
-    provider: providerName = "ollama",
+    provider: providerName = 'ollama',
     model,
     messages,
     session_id,
-    project_id = "default",
+    project_id = 'default',
     temperature,
-  } = req.body;
+  } = req.body
 
   if (!model || !messages?.length) {
-    return res.status(400).json({ error: "model and messages are required" });
+    return res.status(400).json({ error: 'model and messages are required' })
   }
 
-  const providers = getProviders(req.app.get("ollamaUrl"));
-  const provider = providers[providerName];
+  const providers = getProviders(req.app.get('ollamaUrl'))
+  const provider = providers[providerName]
   if (!provider) {
-    return res.status(400).json({ error: `Unknown provider: ${providerName}` });
+    return res.status(400).json({ error: `Unknown provider: ${providerName}` })
   }
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
 
-  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`)
 
-  const db = req.app.get("db");
+  const db = req.app.get('db')
 
   try {
     // Resolve or create session
-    let sessionId = session_id;
+    let sessionId = session_id
     if (!sessionId) {
-      sessionId = uuidv4();
-      const firstUserMsg = messages.find((m) => m.role === "user");
-      const title = firstUserMsg ? firstUserMsg.content.slice(0, 80) : "New chat";
+      sessionId = uuidv4()
+      const firstUserMsg = messages.find((m) => m.role === 'user')
+      const title = firstUserMsg
+        ? firstUserMsg.content.slice(0, 80)
+        : 'New chat'
       db.prepare(
-        "INSERT INTO chat_sessions (id, project_id, title) VALUES (?, ?, ?)"
-      ).run(sessionId, project_id, title);
+        'INSERT INTO chat_sessions (id, project_id, title) VALUES (?, ?, ?)',
+      ).run(sessionId, project_id, title)
     }
 
     // Save user message
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
       db.prepare(
-        "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)"
-      ).run(sessionId, "user", lastUserMsg.content);
+        'INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)',
+      ).run(sessionId, 'user', lastUserMsg.content)
     }
 
-    send({ type: "session", session_id: sessionId });
+    send({ type: 'session', session_id: sessionId })
 
     // Inject system context selectively based on what the user is asking about
-    const relevance = detectRelevance(lastUserMsg?.content || "");
-    const context = await buildContext(db, { relevance, mode: "chat" });
+    const relevance = detectRelevance(lastUserMsg?.content || '')
+    const context = await buildContext(db, { relevance, mode: 'chat' })
     const augmentedMessages = context
-      ? [{ role: "system", content: context }, ...messages]
-      : messages;
+      ? [{ role: 'system', content: context }, ...messages]
+      : messages
 
-    let fullContent = "";
-    let totalTokens;
+    let fullContent = ''
+    let totalTokens
 
-    for await (const chunk of provider.streamCompletion({ model, messages: augmentedMessages, temperature })) {
+    for await (const chunk of provider.streamCompletion({
+      model,
+      messages: augmentedMessages,
+      temperature,
+    })) {
       if (chunk.done) {
-        totalTokens = chunk.totalTokens;
+        totalTokens = chunk.totalTokens
       } else {
-        fullContent += chunk.token;
-        send({ type: "token", token: chunk.token, done: false });
+        fullContent += chunk.token
+        send({ type: 'token', token: chunk.token, done: false })
       }
     }
 
     // Parse and execute any task actions from the AI response
-    const { actions, cleanContent } = parseActions(fullContent);
-    const actionResults = [];
+    const { actions, cleanContent } = parseActions(fullContent)
     for (const action of actions) {
-      const result = executeAction(db, action);
-      actionResults.push(result);
-      send({ type: "task_action", ...result });
+      const result = executeAction(db, action, project_id)
+      send({ type: 'task_action', ...result })
     }
 
     // Save assistant response (with action blocks stripped)
-    const contentToSave = actions.length > 0 ? cleanContent : fullContent;
+    const contentToSave = actions.length > 0 ? cleanContent : fullContent
     db.prepare(
-      "INSERT INTO chat_messages (session_id, role, content, model, provider, tokens_used) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(sessionId, "assistant", contentToSave, model, providerName, totalTokens ?? null);
+      'INSERT INTO chat_messages (session_id, role, content, model, provider, tokens_used) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(
+      sessionId,
+      'assistant',
+      contentToSave,
+      model,
+      providerName,
+      totalTokens ?? null,
+    )
 
     // Update session updated_at
     db.prepare(
-      "UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?"
-    ).run(sessionId);
+      "UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?",
+    ).run(sessionId)
 
-    send({ type: "done", session_id: sessionId });
+    send({ type: 'done', session_id: sessionId })
   } catch (err) {
-    send({ type: "error", error: err.message });
+    send({ type: 'error', error: err.message })
   }
 
-  res.end();
-});
+  res.end()
+})
 
 // GET /api/chat/sessions
-router.get("/sessions", (req, res) => {
-  const { project_id, limit = 50 } = req.query;
-  const db = req.app.get("db");
+router.get('/sessions', (req, res) => {
+  const { project_id, limit = 50 } = req.query
+  const db = req.app.get('db')
 
-  let stmt;
+  let stmt
   if (project_id) {
     stmt = db.prepare(
-      "SELECT * FROM chat_sessions WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?"
-    );
-    res.json(stmt.all(project_id, Number(limit)));
+      'SELECT * FROM chat_sessions WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?',
+    )
+    res.json(stmt.all(project_id, Number(limit)))
   } else {
     stmt = db.prepare(
-      "SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT ?"
-    );
-    res.json(stmt.all(Number(limit)));
+      'SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT ?',
+    )
+    res.json(stmt.all(Number(limit)))
   }
-});
+})
 
 // GET /api/chat/sessions/:id/messages
-router.get("/sessions/:id/messages", (req, res) => {
-  const db = req.app.get("db");
+router.get('/sessions/:id/messages', (req, res) => {
+  const db = req.app.get('db')
   const messages = db
-    .prepare("SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC")
-    .all(req.params.id);
-  res.json(messages);
-});
+    .prepare(
+      'SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC',
+    )
+    .all(req.params.id)
+  res.json(messages)
+})
 
 // DELETE /api/chat/sessions/:id
-router.delete("/sessions/:id", (req, res) => {
-  const db = req.app.get("db");
-  db.prepare("DELETE FROM chat_sessions WHERE id = ?").run(req.params.id);
-  res.status(204).end();
-});
+router.delete('/sessions/:id', (req, res) => {
+  const db = req.app.get('db')
+  db.prepare('DELETE FROM chat_sessions WHERE id = ?').run(req.params.id)
+  res.status(204).end()
+})
 
 // POST /api/chat/task-command — run an AI command against a specific task
-router.post("/task-command", async (req, res) => {
-  const { task_id, command } = req.body;
+router.post('/task-command', async (req, res) => {
+  const { task_id, command } = req.body
   if (!task_id || !command) {
-    return res.status(400).json({ error: "task_id and command are required" });
+    return res.status(400).json({ error: 'task_id and command are required' })
   }
 
-  const db = req.app.get("db");
-  const task = db.prepare("SELECT * FROM board_tasks WHERE id = ?").get(task_id);
+  const db = req.app.get('db')
+  const task = db.prepare('SELECT * FROM board_tasks WHERE id = ?').get(task_id)
   if (!task) {
-    return res.status(404).json({ error: "Task not found" });
+    return res.status(404).json({ error: 'Task not found' })
   }
 
-  const prompt = getTaskPrompt(command, task);
+  const prompt = getTaskPrompt(command, task)
   if (!prompt) {
-    return res.status(400).json({ error: `Unknown command: ${command}` });
+    return res.status(400).json({ error: `Unknown command: ${command}` })
   }
 
   // Find an available model
-  const providers = getProviders(req.app.get("ollamaUrl"));
-  const provider = providers.ollama;
+  const providers = getProviders(req.app.get('ollamaUrl'))
+  const provider = providers.ollama
 
   try {
-    const available = await provider.isAvailable();
+    const available = await provider.isAvailable()
     if (!available) {
-      return res.status(503).json({ error: "No LLM provider is available. Start Ollama and load a model." });
+      return res.status(503).json({
+        error: 'No LLM provider is available. Start Ollama and load a model.',
+      })
     }
 
-    const models = await provider.listModels();
+    const models = await provider.listModels()
     if (models.length === 0) {
-      return res.status(503).json({ error: "No models loaded. Pull a model in Ollama first." });
+      return res
+        .status(503)
+        .json({ error: 'No models loaded. Pull a model in Ollama first.' })
     }
 
-    const model = models[0].id;
+    const model = models[0].id
 
     // Build lightweight context for the specific task (no full board/GitHub)
-    const context = await buildContext(db, { mode: "task-command", task });
-    const messages = [];
+    const context = await buildContext(db, { mode: 'task-command', task })
+    const messages = []
     if (context) {
-      messages.push({ role: "system", content: context });
+      messages.push({ role: 'system', content: context })
     }
-    messages.push({ role: "user", content: prompt });
+    messages.push({ role: 'user', content: prompt })
 
-    const result = await provider.complete({ model, messages, temperature: 0.7 });
-    res.json({ content: result.content });
+    const result = await provider.complete({
+      model,
+      messages,
+      temperature: 0.7,
+    })
+    res.json({ content: result.content })
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message })
   }
-});
+})
 
-export default router;
+export default router
