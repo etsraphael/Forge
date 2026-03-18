@@ -7,6 +7,8 @@ import chatRouter from "./routes/chat.js";
 import tasksRouter from "./routes/tasks.js";
 import connectorsRouter from "./routes/connectors.js";
 import githubRouter from "./routes/github.js";
+import githubOAuthRouter from "./routes/githubOAuth.js";
+import localGitRouter from "./routes/local-git.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
@@ -27,7 +29,9 @@ app.set("ollamaUrl", ollamaUrl);
 app.use("/api/chat", chatRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/connectors", connectorsRouter);
+app.use("/api/github/oauth", githubOAuthRouter);
 app.use("/api/github", githubRouter);
+app.use("/api/local-git", localGitRouter);
 
 app.get("/api/health", async (_req, res) => {
   try {
