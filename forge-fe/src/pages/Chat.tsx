@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Bot, Trash2, Plus, MessageSquare, Menu, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { MarkdownContent } from '@/components/chat/markdown-content'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -506,14 +507,18 @@ export default function Chat() {
                     : 'rounded-[18px_18px_18px_4px] border border-border bg-card',
                 )}
               >
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {msg.content}
-                  {msg.role === 'assistant' &&
-                    isGenerating &&
-                    i === messages.length - 1 && (
+                {msg.role === 'user' ? (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {msg.content}
+                  </p>
+                ) : (
+                  <div className="chat-markdown">
+                    <MarkdownContent content={msg.content} />
+                    {isGenerating && i === messages.length - 1 && (
                       <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
                     )}
-                </p>
+                  </div>
+                )}
                 {msg.model && (
                   <span
                     className={cn(
