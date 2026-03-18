@@ -175,7 +175,10 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
           detail: `Connected as @${data.user} to ${data.repoInfo.fullName}`,
         })
       } else {
-        setTestResult({ valid: false, detail: data.error || 'Connection failed' })
+        setTestResult({
+          valid: false,
+          detail: data.error || 'Connection failed',
+        })
       }
     } catch {
       setTestResult({ valid: false, detail: 'Network error' })
@@ -720,7 +723,9 @@ export default function Connectors() {
             onToggle={handleToggle}
             onDelete={handleDelete}
             providerStatuses={cat === 'llm' ? providerStatuses : undefined}
-            connectorStatuses={cat === 'repository' ? connectorStatuses : undefined}
+            connectorStatuses={
+              cat === 'repository' ? connectorStatuses : undefined
+            }
           />
         ))}
       </div>
