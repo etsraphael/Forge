@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BrainCircuit,
   ChevronDown,
+  Github,
   GitBranch,
+  Lock,
   Plus,
+  Search,
   Trash2,
   Power,
   X,
@@ -46,6 +49,7 @@ interface Template {
   id: string
   label: string
   fields: FieldDef[]
+  oauth?: boolean
 }
 
 const TEMPLATES: Record<ConnectorCategory, Template[]> = {
@@ -83,15 +87,8 @@ const TEMPLATES: Record<ConnectorCategory, Template[]> = {
     {
       id: 'github',
       label: 'GitHub',
-      fields: [
-        { key: 'repo', label: 'Repository', placeholder: 'org/repo' },
-        {
-          key: 'token',
-          label: 'Personal Access Token',
-          placeholder: 'ghp_...',
-          type: 'password',
-        },
-      ],
+      fields: [],
+      oauth: true,
     },
     {
       id: 'local-git',
@@ -139,58 +136,270 @@ interface AddFormProps {
   onCancel: () => void
 }
 
+interface GitHubRepo {
+  fullName: string
+  private: boolean
+  description: string | null
+  language: string | null
+  updatedAt: string
+}
+
+function GitHubOAuthForm({
+  onSave,
+  onCancel,
+  saving,
+}: {
+  onSave: (config: Record<string, string>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [oauthToken, setOauthToken] = useState<string | null>(null)
+  const [githubUser, setGithubUser] = useState<string | null>(null)
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
+  const [oauthLoading, setOauthLoading] = useState(false)
+  const [reposLoading, setReposLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [repoSearch, setRepoSearch] = useState('')
+  const popupRef = useRef<Window | null>(null)
+  const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const cleanupPopup = useCallback(() => {
+    if (popupPollRef.current) {
+      clearInterval(popupPollRef.current)
+      popupPollRef.current = null
+    }
+    popupRef.current = null
+  }, [])
+
+  // Listen for OAuth postMessage
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === 'github-oauth-success') {
+        setOauthToken(event.data.token)
+        setOauthLoading(false)
+        setError(null)
+        cleanupPopup()
+      } else if (event.data?.type === 'github-oauth-error') {
+        setOauthLoading(false)
+        setError(event.data.error || 'Authorization failed')
+        cleanupPopup()
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => {
+      window.removeEventListener('message', handler)
+      cleanupPopup()
+    }
+  }, [cleanupPopup])
+
+  // Fetch repos once we have a token
+  useEffect(() => {
+    if (!oauthToken) return
+    setReposLoading(true)
+    fetch('/api/github/oauth/repos?per_page=100', {
+      headers: { Authorization: `Bearer ${oauthToken}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setGithubUser(data.user)
+        setRepos(data.repos || [])
+      })
+      .catch(() => setError('Failed to load repositories'))
+      .finally(() => setReposLoading(false))
+  }, [oauthToken])
+
+  const handleConnect = async () => {
+    setOauthLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/github/oauth/authorize')
+      const data = await res.json()
+      if (data.error) {
+        setError(data.error)
+        setOauthLoading(false)
+        return
+      }
+      const popup = window.open(data.url, 'github-oauth', 'width=600,height=700')
+      popupRef.current = popup
+
+      // Poll for popup closed without completing auth
+      popupPollRef.current = setInterval(() => {
+        if (popup && popup.closed) {
+          cleanupPopup()
+          setOauthLoading((loading) => {
+            if (loading) setError('Authorization window was closed')
+            return false
+          })
+        }
+      }, 500)
+    } catch {
+      setError('Failed to start authorization')
+      setOauthLoading(false)
+    }
+  }
+
+  const handleSave = () => {
+    if (oauthToken && selectedRepo) {
+      onSave({ token: oauthToken, repo: selectedRepo })
+    }
+  }
+
+  const filteredRepos = repos.filter((r) =>
+    r.fullName.toLowerCase().includes(repoSearch.toLowerCase()),
+  )
+
+  return (
+    <div className="space-y-3 p-4">
+      {!oauthToken ? (
+        /* Not connected — show Connect button */
+        <div className="flex flex-col items-center gap-3 py-4">
+          <button
+            type="button"
+            onClick={handleConnect}
+            disabled={oauthLoading}
+            className="flex items-center gap-2 rounded-lg bg-[#24292f] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {oauthLoading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Github className="size-4" />
+            )}
+            {oauthLoading ? 'Authorizing…' : 'Connect GitHub'}
+          </button>
+          <p className="text-xs text-muted-foreground">
+            Sign in with GitHub to select a repository
+          </p>
+        </div>
+      ) : (
+        /* Connected — show user + repo selector */
+        <>
+          <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-medium text-green-400">
+            <CheckCircle2 className="size-3.5 shrink-0" />
+            Connected as @{githubUser}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Select repository
+            </label>
+            {reposLoading ? (
+              <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Loading repositories…
+              </div>
+            ) : (
+              <>
+                <div className="relative mb-2">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                  <input
+                    type="text"
+                    placeholder="Search repositories…"
+                    value={repoSearch}
+                    onChange={(e) => setRepoSearch(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
+                  {filteredRepos.length === 0 ? (
+                    <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                      No repositories found
+                    </p>
+                  ) : (
+                    filteredRepos.map((r) => (
+                      <button
+                        key={r.fullName}
+                        type="button"
+                        onClick={() => setSelectedRepo(r.fullName)}
+                        className={cn(
+                          'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50',
+                          selectedRepo === r.fullName &&
+                            'bg-primary/10 text-primary',
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate font-medium">
+                              {r.fullName}
+                            </span>
+                            {r.private && (
+                              <Lock className="size-3 shrink-0 text-muted-foreground" />
+                            )}
+                          </div>
+                          {r.description && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {r.description}
+                            </p>
+                          )}
+                        </div>
+                        {r.language && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {r.language}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400">
+          <XCircle className="size-3.5 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !oauthToken || !selectedRepo}
+          className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save connector'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function AddForm({ category, onSave, onCancel }: AddFormProps) {
   const templates = TEMPLATES[category]
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0])
   const [fields, setFields] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
-  const [testResult, setTestResult] = useState<{
-    valid: boolean
-    detail: string
-  } | null>(null)
-  const [testing, setTesting] = useState(false)
 
   const handleTemplateChange = (id: string) => {
     const t = templates.find((t) => t.id === id)!
     setSelectedTemplate(t)
     setFields({})
-    setTestResult(null)
-  }
-
-  const isGitHub = category === 'repository' && selectedTemplate.id === 'github'
-
-  const handleTest = async () => {
-    setTesting(true)
-    setTestResult(null)
-    try {
-      const res = await fetch('/api/github/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: fields.token, repo: fields.repo }),
-      })
-      const data = await res.json()
-      if (data.valid) {
-        setTestResult({
-          valid: true,
-          detail: `Connected as @${data.user} to ${data.repoInfo.fullName}`,
-        })
-      } else {
-        setTestResult({
-          valid: false,
-          detail: data.error || 'Connection failed',
-        })
-      }
-    } catch {
-      setTestResult({ valid: false, detail: 'Network error' })
-    } finally {
-      setTesting(false)
-    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     await onSave(selectedTemplate.id, fields)
+    setSaving(false)
+  }
+
+  const handleOAuthSave = async (config: Record<string, string>) => {
+    setSaving(true)
+    await onSave(selectedTemplate.id, config)
     setSaving(false)
   }
 
@@ -219,73 +428,54 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
         ))}
       </div>
 
-      {/* Fields */}
-      <div className="space-y-3 p-4">
-        {selectedTemplate.fields.map((f) => (
-          <div key={f.key}>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              {f.label}
-            </label>
-            <input
-              type={f.type ?? 'text'}
-              placeholder={f.placeholder}
-              value={fields[f.key] ?? ''}
-              onChange={(e) =>
-                setFields((prev) => ({ ...prev, [f.key]: e.target.value }))
-              }
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
-            />
+      {/* OAuth flow for GitHub */}
+      {selectedTemplate.oauth ? (
+        <GitHubOAuthForm
+          onSave={handleOAuthSave}
+          onCancel={onCancel}
+          saving={saving}
+        />
+      ) : (
+        <>
+          {/* Fields */}
+          <div className="space-y-3 p-4">
+            {selectedTemplate.fields.map((f) => (
+              <div key={f.key}>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  {f.label}
+                </label>
+                <input
+                  type={f.type ?? 'text'}
+                  placeholder={f.placeholder}
+                  value={fields[f.key] ?? ''}
+                  onChange={(e) =>
+                    setFields((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
+                />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Test result */}
-      {isGitHub && testResult && (
-        <div
-          className={cn(
-            'mx-4 mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium',
-            testResult.valid
-              ? 'bg-green-500/10 text-green-400'
-              : 'bg-red-500/10 text-red-400',
-          )}
-        >
-          {testResult.valid ? (
-            <CheckCircle2 className="size-3.5 shrink-0" />
-          ) : (
-            <XCircle className="size-3.5 shrink-0" />
-          )}
-          {testResult.detail}
-        </div>
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/10 px-4 py-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save connector'}
+            </button>
+          </div>
+        </>
       )}
-
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/10 px-4 py-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          Cancel
-        </button>
-        {isGitHub && (
-          <button
-            type="button"
-            onClick={handleTest}
-            disabled={testing || !fields.token || !fields.repo}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-          >
-            {testing && <Loader2 className="size-3.5 animate-spin" />}
-            {testing ? 'Testing…' : 'Test connection'}
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save connector'}
-        </button>
-      </div>
     </form>
   )
 }
