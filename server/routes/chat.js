@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { OllamaProvider } from "../providers/ollama.js";
+import { buildContext } from "../services/context-builder.js";
+import { detectRelevance } from "../services/relevance.js";
+import { getTaskPrompt } from "../services/task-prompts.js";
 // import { OpenRouterProvider } from "../providers/openrouter.js";
 // import { OpenAIProvider } from "../providers/openai.js";
 // import { AnthropicProvider } from "../providers/anthropic.js";
@@ -86,10 +89,17 @@ router.post("/completions", async (req, res) => {
 
     send({ type: "session", session_id: sessionId });
 
+    // Inject system context selectively based on what the user is asking about
+    const relevance = detectRelevance(lastUserMsg?.content || "");
+    const context = await buildContext(db, { relevance, mode: "chat" });
+    const augmentedMessages = context
+      ? [{ role: "system", content: context }, ...messages]
+      : messages;
+
     let fullContent = "";
     let totalTokens;
 
-    for await (const chunk of provider.streamCompletion({ model, messages, temperature })) {
+    for await (const chunk of provider.streamCompletion({ model, messages: augmentedMessages, temperature })) {
       if (chunk.done) {
         totalTokens = chunk.totalTokens;
       } else {
@@ -149,6 +159,56 @@ router.delete("/sessions/:id", (req, res) => {
   const db = req.app.get("db");
   db.prepare("DELETE FROM chat_sessions WHERE id = ?").run(req.params.id);
   res.status(204).end();
+});
+
+// POST /api/chat/task-command — run an AI command against a specific task
+router.post("/task-command", async (req, res) => {
+  const { task_id, command } = req.body;
+  if (!task_id || !command) {
+    return res.status(400).json({ error: "task_id and command are required" });
+  }
+
+  const db = req.app.get("db");
+  const task = db.prepare("SELECT * FROM board_tasks WHERE id = ?").get(task_id);
+  if (!task) {
+    return res.status(404).json({ error: "Task not found" });
+  }
+
+  const prompt = getTaskPrompt(command, task);
+  if (!prompt) {
+    return res.status(400).json({ error: `Unknown command: ${command}` });
+  }
+
+  // Find an available model
+  const providers = getProviders(req.app.get("ollamaUrl"));
+  const provider = providers.ollama;
+
+  try {
+    const available = await provider.isAvailable();
+    if (!available) {
+      return res.status(503).json({ error: "No LLM provider is available. Start Ollama and load a model." });
+    }
+
+    const models = await provider.listModels();
+    if (models.length === 0) {
+      return res.status(503).json({ error: "No models loaded. Pull a model in Ollama first." });
+    }
+
+    const model = models[0].id;
+
+    // Build lightweight context for the specific task (no full board/GitHub)
+    const context = await buildContext(db, { mode: "task-command", task });
+    const messages = [];
+    if (context) {
+      messages.push({ role: "system", content: context });
+    }
+    messages.push({ role: "user", content: prompt });
+
+    const result = await provider.complete({ model, messages, temperature: 0.7 });
+    res.json({ content: result.content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
