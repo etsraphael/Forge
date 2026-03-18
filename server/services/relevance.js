@@ -12,6 +12,14 @@ const taskPatterns = [
   /\bshipped\b/,
   /\bideas?\b/,
   /\breview\b/,
+  /\bcreate\s+(a\s+)?task\b/,
+  /\badd\s+(a\s+)?task\b/,
+  /\bmake\s+(a\s+)?task\b/,
+  /\bdelete\s+(a\s+)?task\b/,
+  /\bremove\s+(a\s+)?task\b/,
+  /\bupdate\s+(a\s+)?task\b/,
+  /\bedit\s+(a\s+)?task\b/,
+  /\bmove\s+(a\s+)?task\b/,
 ];
 
 const issuePatterns = [

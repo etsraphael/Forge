@@ -3,11 +3,18 @@ import { Send, Bot, Trash2, Plus, MessageSquare, Menu, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { MarkdownContent } from '@/components/chat/markdown-content'
+import { TaskActionCard } from '@/components/chat/task-action-card'
+import type { TaskActionResult } from '@/types'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
   model?: string
+  taskAction?: TaskActionResult
+}
+
+function stripActionBlocks(content: string): string {
+  return content.replace(/~~~forge-action[\s\S]*?~~~/g, '').trim()
 }
 
 interface Model {
@@ -413,6 +420,18 @@ export default function Chat() {
                   { ...last, content: last.content + event.token },
                 ]
               })
+            } else if (event.type === 'task_action') {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1]
+                return [
+                  ...prev.slice(0, -1),
+                  {
+                    ...last,
+                    content: stripActionBlocks(last.content),
+                    taskAction: event as unknown as TaskActionResult,
+                  },
+                ]
+              })
             } else if (event.type === 'error') {
               throw new Error(event.error)
             }
@@ -513,9 +532,18 @@ export default function Chat() {
                   </p>
                 ) : (
                   <div className="chat-markdown">
-                    <MarkdownContent content={msg.content} />
+                    <MarkdownContent
+                      content={
+                        msg.taskAction
+                          ? stripActionBlocks(msg.content)
+                          : msg.content
+                      }
+                    />
                     {isGenerating && i === messages.length - 1 && (
                       <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
+                    )}
+                    {msg.taskAction && (
+                      <TaskActionCard result={msg.taskAction} />
                     )}
                   </div>
                 )}

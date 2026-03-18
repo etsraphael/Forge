@@ -22,8 +22,9 @@ const PREAMBLE_MINIMAL =
 
 const PREAMBLE_FULL =
   "You are a helpful AI assistant integrated into Forge, a project management and automation dashboard. " +
-  "You have read-only access to the user's task board and connected code repositories (GitHub and/or local git). " +
+  "You have access to the user's task board (read and write) and connected code repositories (GitHub and/or local git). " +
   "Use this context to answer questions about tasks, issues, pull requests, code, and project structure. " +
+  "You can also create, update, and delete tasks on the board when the user asks. " +
   "Be concise and specific when referencing items.\n\n";
 
 const columnLabels = {
@@ -119,6 +120,46 @@ function buildTaskCommandContext(db, task) {
   }
 
   return text;
+}
+
+// --- Task CRUD instructions for the AI ---
+
+function buildTaskCrudInstructions() {
+  return `## Task Actions
+
+You can create, update, and delete tasks on the board. When the user asks you to do so, respond conversationally first, then append a forge-action block at the very end of your response.
+
+**Format:** Use a fenced block with \`~~~forge-action\` to wrap a single JSON action.
+
+### Create a task
+~~~forge-action
+{"action":"create_task","title":"Task title","description":"Optional description","priority":"medium","column_id":"todo","type":"automation"}
+~~~
+
+- **priority**: "high", "medium", or "low" (default: "medium")
+- **column_id**: "ideas", "todo", "in-progress", "review", or "shipped" (default: "ideas")
+- **type**: "automation", "creator-research", "competitive", "review", or "system" (default: "automation")
+
+### Update a task
+~~~forge-action
+{"action":"update_task","task_id":"<id from board>","updates":{"priority":"high","column_id":"in-progress"}}
+~~~
+
+- Use the task ID shown in the board context (e.g., the UUID).
+- Allowed update fields: title, type, column_id, priority, description.
+
+### Delete a task
+~~~forge-action
+{"action":"delete_task","task_id":"<id from board>"}
+~~~
+
+**Rules:**
+- Only emit ONE action per response.
+- Always write your conversational reply BEFORE the action block.
+- Only emit an action block when the user explicitly asks to create, update, move, or delete a task.
+- Do NOT emit action blocks for read-only questions about tasks.
+
+`;
 }
 
 // --- GitHub context builders (per-section, independently cached) ---
@@ -326,7 +367,7 @@ export async function buildContext(db, { relevance, mode, task } = {}) {
       fetchFilteredLocalGitContext(db, { repo: true, commits: true }),
     ]);
     if (!taskCtx && !githubCtx && !localGitCtx) return "";
-    return PREAMBLE_FULL + taskCtx + githubCtx + localGitCtx;
+    return PREAMBLE_FULL + taskCtx + buildTaskCrudInstructions() + githubCtx + localGitCtx;
   }
 
   // Relevance-based: only include what's needed
@@ -346,5 +387,6 @@ export async function buildContext(db, { relevance, mode, task } = {}) {
   }
 
   const parts = await Promise.all(fetches);
-  return PREAMBLE_FULL + parts.join("");
+  const crudInstructions = needsTasks ? buildTaskCrudInstructions() : "";
+  return PREAMBLE_FULL + parts.join("") + crudInstructions;
 }

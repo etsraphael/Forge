@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { PriorityDot } from '@/components/ui/priority-dot'
 import { TypeIcon } from '@/components/ui/type-icon'
 import { Button } from '@/components/ui/button'
+import { MarkdownContent } from '@/components/chat/markdown-content'
 
 interface AiCommand {
   id: string
@@ -310,9 +311,13 @@ export function TaskDetailModal({
               ) : (
                 <>
                   {/* Description */}
-                  <p className="text-sm text-muted-foreground">
-                    {task.description || <em>No description</em>}
-                  </p>
+                  {task.description ? (
+                    <MarkdownContent content={task.description} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      <em>No description</em>
+                    </p>
+                  )}
 
                   {/* AI Commands */}
                   <div className="mt-6">
@@ -363,47 +368,7 @@ export function TaskDetailModal({
                           Running AI command…
                         </div>
                       ) : (
-                        <div className="prose-sm text-sm text-foreground">
-                          {commandOutput!.split('\n').map((line, i) => {
-                            if (line.startsWith('**') && line.endsWith('**')) {
-                              return (
-                                <p
-                                  key={i}
-                                  className="mt-2 font-semibold first:mt-0"
-                                >
-                                  {line.replace(/\*\*/g, '')}
-                                </p>
-                              )
-                            }
-                            if (line.startsWith('```')) return null
-                            if (line.startsWith('- ')) {
-                              return (
-                                <p
-                                  key={i}
-                                  className="ml-2 text-muted-foreground"
-                                >
-                                  {line}
-                                </p>
-                              )
-                            }
-                            if (/^\d+\.\s/.test(line)) {
-                              return (
-                                <p
-                                  key={i}
-                                  className="ml-2 text-muted-foreground"
-                                >
-                                  {line}
-                                </p>
-                              )
-                            }
-                            if (line.trim() === '') return <br key={i} />
-                            return (
-                              <p key={i} className="text-muted-foreground">
-                                {line}
-                              </p>
-                            )
-                          })}
-                        </div>
+                        <MarkdownContent content={commandOutput!} />
                       )}
                     </div>
                   )}

@@ -4,6 +4,8 @@ import { OllamaProvider } from "../providers/ollama.js";
 import { buildContext } from "../services/context-builder.js";
 import { detectRelevance } from "../services/relevance.js";
 import { getTaskPrompt } from "../services/task-prompts.js";
+import { parseActions } from "../services/action-parser.js";
+import { executeAction } from "../services/action-executor.js";
 // import { OpenRouterProvider } from "../providers/openrouter.js";
 // import { OpenAIProvider } from "../providers/openai.js";
 // import { AnthropicProvider } from "../providers/anthropic.js";
@@ -108,10 +110,20 @@ router.post("/completions", async (req, res) => {
       }
     }
 
-    // Save assistant response
+    // Parse and execute any task actions from the AI response
+    const { actions, cleanContent } = parseActions(fullContent);
+    const actionResults = [];
+    for (const action of actions) {
+      const result = executeAction(db, action);
+      actionResults.push(result);
+      send({ type: "task_action", ...result });
+    }
+
+    // Save assistant response (with action blocks stripped)
+    const contentToSave = actions.length > 0 ? cleanContent : fullContent;
     db.prepare(
       "INSERT INTO chat_messages (session_id, role, content, model, provider, tokens_used) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(sessionId, "assistant", fullContent, model, providerName, totalTokens ?? null);
+    ).run(sessionId, "assistant", contentToSave, model, providerName, totalTokens ?? null);
 
     // Update session updated_at
     db.prepare(

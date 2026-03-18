@@ -77,6 +77,23 @@ export interface BoardColumnDef {
   color: string
 }
 
+// ── Task Actions (from Chat) ──
+
+export interface TaskActionResult {
+  success: boolean
+  action: 'create_task' | 'update_task' | 'delete_task'
+  task?: {
+    id: string
+    title: string
+    type: string
+    column_id: string
+    priority: string
+    description: string
+  }
+  deletedTask?: { id: string; title: string }
+  error?: string
+}
+
 // ── Activity ──
 
 export type ActivityAction =
