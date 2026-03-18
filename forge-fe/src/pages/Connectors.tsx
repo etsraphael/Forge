@@ -221,7 +221,11 @@ function GitHubOAuthForm({
         setOauthLoading(false)
         return
       }
-      const popup = window.open(data.url, 'github-oauth', 'width=600,height=700')
+      const popup = window.open(
+        data.url,
+        'github-oauth',
+        'width=600,height=700',
+      )
       popupRef.current = popup
 
       // Poll for popup closed without completing auth
