@@ -2,6 +2,7 @@ import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { OllamaProvider } from "../providers/ollama.js";
 import { buildContext } from "../services/context-builder.js";
+import { detectRelevance } from "../services/relevance.js";
 import { getTaskPrompt } from "../services/task-prompts.js";
 // import { OpenRouterProvider } from "../providers/openrouter.js";
 // import { OpenAIProvider } from "../providers/openai.js";
@@ -88,8 +89,9 @@ router.post("/completions", async (req, res) => {
 
     send({ type: "session", session_id: sessionId });
 
-    // Inject system context (tasks + GitHub data) into messages
-    const context = await buildContext(db);
+    // Inject system context selectively based on what the user is asking about
+    const relevance = detectRelevance(lastUserMsg?.content || "");
+    const context = await buildContext(db, { relevance, mode: "chat" });
     const augmentedMessages = context
       ? [{ role: "system", content: context }, ...messages]
       : messages;
@@ -194,8 +196,8 @@ router.post("/task-command", async (req, res) => {
 
     const model = models[0].id;
 
-    // Build context-enriched messages
-    const context = await buildContext(db);
+    // Build lightweight context for the specific task (no full board/GitHub)
+    const context = await buildContext(db, { mode: "task-command", task });
     const messages = [];
     if (context) {
       messages.push({ role: "system", content: context });
