@@ -1,0 +1,30 @@
+name: Lint & Format Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-format:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: forge-fe/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix forge-fe
+
+      - name: Run ESLint
+        run: npm run lint --prefix forge-fe
+
+      - name: Check Prettier formatting
+        run: npm run format:check --prefix forge-fe

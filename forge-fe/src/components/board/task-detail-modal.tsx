@@ -184,7 +184,9 @@ export function TaskDetailModal({
         setCommandOutput(data.content)
       }
     } catch {
-      setCommandOutput('**Error:** Failed to reach the server. Is the backend running?')
+      setCommandOutput(
+        '**Error:** Failed to reach the server. Is the backend running?',
+      )
     } finally {
       setRunningCommand(null)
     }
