@@ -2,22 +2,16 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    types: [opened, synchronize]
+    branches:
+      - main
+    paths:
+      - 'server/**'
+      - 'forge-fe/**'
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,14 +25,78 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Run Claude Code Review
-        id: claude-review
+      - name: Detect changed files
+        id: changes
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            server:
+              - 'server/**'
+            frontend:
+              - 'forge-fe/**'
+
+      - name: Run Claude Code Review for Server
+        if: steps.changes.outputs.server == 'true'
+        id: claude-review-server
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          show_full_output: true
-          classify_inline_comments: 'false'
+          prompt: |
+            Please review the backend (server/) changes in this pull request.
 
+            This is a Node.js/Express backend with SQLite (via better-sqlite3),
+            GitHub API integration (via @octokit/rest), and AI provider integrations.
+
+            FOCUS AREAS:
+            - Security: SQL injection in SQLite queries, input validation, exposed secrets, SSRF, path traversal
+            - Express.js best practices: Error handling middleware, proper status codes, async/await patterns
+            - Database: Parameterized queries, transaction usage, migration safety
+            - Error handling: No uncaught promise rejections, proper error responses
+            - Code quality: No console.log in production paths, no hardcoded values (localhost, ports)
+
+            CHECK FOR:
+            - All async errors are caught (try/catch or .catch())
+            - SQL queries use parameterized statements (no string interpolation)
+            - No secrets or API keys in code
+            - Proper HTTP status codes on error responses
+            - No eval() or unsafe dynamic code execution
+
+            Provide specific, actionable feedback on any issues found.
+            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read"'
+
+      - name: Run Claude Code Review for Frontend
+        if: steps.changes.outputs.frontend == 'true'
+        id: claude-review-frontend
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Please review the frontend (forge-fe/) changes in this pull request.
+
+            This is a React 19 + TypeScript + Vite frontend using Tailwind CSS v4,
+            shadcn/ui components, react-router v7, and react-markdown for rendering.
+
+            FOCUS AREAS:
+            - Security: XSS risks especially in markdown rendering (react-markdown, rehype-highlight)
+            - React best practices: Hooks rules, proper key props, effect cleanup
+            - TypeScript: No `any` types without justification, proper prop typing
+            - Component architecture: Reusability, separation of concerns
+            - Performance: Unnecessary re-renders, proper memoization when needed
+            - Accessibility: Semantic HTML, ARIA attributes, keyboard navigation
+            - Tailwind CSS: Responsive design, consistent patterns
+
+            CHECK FOR:
+            - No console.log/debug statements left in
+            - No hardcoded URLs or API endpoints
+            - No exposed API keys or secrets
+            - Proper TypeScript types (no untyped `any`)
+            - Accessible interactive elements (buttons, links, forms)
+            - Images have alt text
+            - Proper error boundaries and user feedback
+
+            Provide specific, actionable feedback on any issues found.
+            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read"'
