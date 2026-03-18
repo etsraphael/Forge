@@ -44,6 +44,12 @@ const commitPatterns = [
 const repoPatterns = [
   /\brepo(sitory)?\b/,
   /\bcodebase\b/,
+  /\bfiles?\b/,
+  /\bdirector(y|ies)\b/,
+  /\bfolder\b/,
+  /\btree\b/,
+  /\blocal\b/,
+  /\bproject structure\b/,
 ];
 
 const hashNumberPattern = /#\d+/;

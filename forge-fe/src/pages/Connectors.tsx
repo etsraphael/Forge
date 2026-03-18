@@ -546,11 +546,47 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0])
   const [fields, setFields] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{
+    valid: boolean
+    detail: string
+  } | null>(null)
+
+  const isLocalGit = selectedTemplate.id === 'local-git'
 
   const handleTemplateChange = (id: string) => {
     const t = templates.find((t) => t.id === id)!
     setSelectedTemplate(t)
     setFields({})
+    setTestResult(null)
+  }
+
+  const handleTestLocalGit = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/local-git/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: fields.path }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setTestResult({
+          valid: true,
+          detail: `Found repo: ${data.repoName} (${data.branch})`,
+        })
+      } else {
+        setTestResult({
+          valid: false,
+          detail: data.error || 'Connection failed',
+        })
+      }
+    } catch {
+      setTestResult({ valid: false, detail: 'Network error' })
+    } finally {
+      setTesting(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -620,6 +656,25 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
             ))}
           </div>
 
+          {/* Test result for local-git */}
+          {isLocalGit && testResult && (
+            <div
+              className={cn(
+                'mx-4 mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium',
+                testResult.valid
+                  ? 'bg-green-500/10 text-green-400'
+                  : 'bg-red-500/10 text-red-400',
+              )}
+            >
+              {testResult.valid ? (
+                <CheckCircle2 className="size-3.5 shrink-0" />
+              ) : (
+                <XCircle className="size-3.5 shrink-0" />
+              )}
+              {testResult.detail}
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/10 px-4 py-3">
             <button
@@ -629,6 +684,17 @@ function AddForm({ category, onSave, onCancel }: AddFormProps) {
             >
               Cancel
             </button>
+            {isLocalGit && (
+              <button
+                type="button"
+                onClick={handleTestLocalGit}
+                disabled={testing || !fields.path}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+              >
+                {testing && <Loader2 className="size-3.5 animate-spin" />}
+                {testing ? 'Testing…' : 'Test connection'}
+              </button>
+            )}
             <button
               type="submit"
               disabled={saving}

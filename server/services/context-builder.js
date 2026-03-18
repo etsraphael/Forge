@@ -1,4 +1,5 @@
 import { getFirstGitHubService } from "./github.js";
+import { getFirstLocalGitService } from "./local-git.js";
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -9,14 +10,20 @@ const githubCache = {
   prs: { data: null, ts: 0 },
 };
 
+const localGitCache = {
+  repo: { data: null, ts: 0 },
+  commits: { data: null, ts: 0 },
+  tree: { data: null, ts: 0 },
+};
+
 const PREAMBLE_MINIMAL =
   "You are a helpful AI assistant in Forge, a project management dashboard. " +
-  "The user's task board and GitHub repository are available if needed — the user can ask about them.\n\n";
+  "The user's task board and code repositories are available if needed — the user can ask about them.\n\n";
 
 const PREAMBLE_FULL =
   "You are a helpful AI assistant integrated into Forge, a project management and automation dashboard. " +
-  "You have read-only access to the user's task board and connected GitHub repository. " +
-  "Use this context to answer questions about tasks, issues, pull requests, and code. " +
+  "You have read-only access to the user's task board and connected code repositories (GitHub and/or local git). " +
+  "Use this context to answer questions about tasks, issues, pull requests, code, and project structure. " +
   "Be concise and specific when referencing items.\n\n";
 
 const columnLabels = {
@@ -216,6 +223,85 @@ async function fetchFilteredGitHubContext(db, flags) {
   }
 }
 
+// --- Local Git context builders (per-section, independently cached) ---
+
+function getLocalCached(key) {
+  const entry = localGitCache[key];
+  if (entry.data && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  return null;
+}
+
+function setLocalCache(key, data) {
+  localGitCache[key] = { data, ts: Date.now() };
+}
+
+function fetchLocalRepoContext(localGit) {
+  const cached = getLocalCached("repo");
+  if (cached) return cached;
+
+  const repo = localGit.getRepository();
+  const text =
+    `## Local Repository: ${repo.name}\n` +
+    `Path: ${repo.fullPath}\n` +
+    `Branch: ${repo.currentBranch}\n` +
+    `Remote: ${repo.remoteUrl || "None"}\n` +
+    `Commits: ${repo.totalCommits}\n\n`;
+
+  setLocalCache("repo", text);
+  return text;
+}
+
+function fetchLocalCommitsContext(localGit) {
+  const cached = getLocalCached("commits");
+  if (cached) return cached;
+
+  const commits = localGit.getRecentCommits(5);
+  if (commits.length === 0) return "";
+
+  let text = "### Recent Local Commits\n";
+  for (const c of commits) {
+    text += `- ${c.sha} ${c.message} (${formatRelativeTime(c.date)})\n`;
+  }
+  text += "\n";
+
+  setLocalCache("commits", text);
+  return text;
+}
+
+function fetchLocalTreeContext(localGit) {
+  const cached = getLocalCached("tree");
+  if (cached) return cached;
+
+  const tree = localGit.getTree("");
+  if (tree.length === 0) return "";
+
+  let text = "### Project Structure\n";
+  for (const entry of tree) {
+    const icon = entry.type === "dir" ? "📁" : "📄";
+    text += `- ${icon} ${entry.name}\n`;
+  }
+  text += "\n";
+
+  setLocalCache("tree", text);
+  return text;
+}
+
+function fetchFilteredLocalGitContext(db, flags) {
+  const localGit = getFirstLocalGitService(db);
+  if (!localGit) return "";
+
+  try {
+    const parts = [];
+    if (flags.repo) parts.push(fetchLocalRepoContext(localGit));
+    if (flags.commits) parts.push(fetchLocalCommitsContext(localGit));
+    if (flags.repo) parts.push(fetchLocalTreeContext(localGit));
+    return parts.join("");
+  } catch (err) {
+    console.error("Failed to fetch local git context:", err.message);
+    return "";
+  }
+}
+
 // --- Main entry point ---
 
 /**
@@ -234,26 +320,30 @@ export async function buildContext(db, { relevance, mode, task } = {}) {
 
   // No relevance provided (backward compat): include everything
   if (!relevance) {
-    const [taskCtx, githubCtx] = await Promise.all([
+    const [taskCtx, githubCtx, localGitCtx] = await Promise.all([
       buildFilteredTaskContext(db),
       fetchFilteredGitHubContext(db, { repo: true, commits: true, issues: true, prs: true }),
+      fetchFilteredLocalGitContext(db, { repo: true, commits: true }),
     ]);
-    if (!taskCtx && !githubCtx) return "";
-    return PREAMBLE_FULL + taskCtx + githubCtx;
+    if (!taskCtx && !githubCtx && !localGitCtx) return "";
+    return PREAMBLE_FULL + taskCtx + githubCtx + localGitCtx;
   }
 
   // Relevance-based: only include what's needed
   const needsTasks = relevance.tasks;
   const gh = relevance.github;
-  const anyGitHub = gh && (gh.repo || gh.commits || gh.issues || gh.prs);
+  const anyRepo = gh && (gh.repo || gh.commits || gh.issues || gh.prs);
 
-  if (!needsTasks && !anyGitHub) {
+  if (!needsTasks && !anyRepo) {
     return PREAMBLE_MINIMAL;
   }
 
   const fetches = [];
   if (needsTasks) fetches.push(buildFilteredTaskContext(db));
-  if (anyGitHub) fetches.push(fetchFilteredGitHubContext(db, gh));
+  if (anyRepo) {
+    fetches.push(fetchFilteredGitHubContext(db, gh));
+    fetches.push(fetchFilteredLocalGitContext(db, gh));
+  }
 
   const parts = await Promise.all(fetches);
   return PREAMBLE_FULL + parts.join("");

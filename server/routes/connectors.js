@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { GitHubService } from "../services/github.js";
+import { LocalGitService } from "../services/local-git.js";
 
 const router = Router();
 
@@ -81,6 +82,21 @@ router.get("/:id/status", async (req, res) => {
       return res.json({
         status: "online",
         detail: `Connected as @${result.user} to ${result.repoInfo.fullName}`,
+      });
+    }
+    return res.json({ status: "error", detail: result.error });
+  }
+
+  if (config.category === "repository" && row.provider === "local-git") {
+    if (!config.path) {
+      return res.json({ status: "error", detail: "Missing path in config" });
+    }
+    const service = new LocalGitService(config.path);
+    const result = service.testConnection();
+    if (result.valid) {
+      return res.json({
+        status: "online",
+        detail: `Local repo: ${result.repoName} (${result.branch})`,
       });
     }
     return res.json({ status: "error", detail: result.error });
