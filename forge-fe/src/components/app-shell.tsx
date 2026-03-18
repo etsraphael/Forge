@@ -61,7 +61,7 @@ export function AppShell({ pendingCount }: AppShellProps) {
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       {/* Header */}
       <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 md:px-6">
           {/* Left: logo + project */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -70,13 +70,13 @@ export function AppShell({ pendingCount }: AppShellProps) {
                 Forge
               </span>
             </div>
-            <div className="h-5 w-px bg-border" />
+            <div className="hidden h-5 w-px bg-border sm:block" />
             <ProjectSwitcher />
           </div>
 
           {/* Right: system status + settings */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 rounded-full bg-green-dim px-2.5 py-1 text-xs font-medium text-green">
+            <div className="hidden items-center gap-1.5 rounded-full bg-green-dim px-2.5 py-1 text-xs font-medium text-green md:flex">
               <span className="size-1.5 rounded-full bg-green" />
               System OK
             </div>
@@ -97,7 +97,7 @@ export function AppShell({ pendingCount }: AppShellProps) {
         </div>
 
         {/* Nav tabs */}
-        <nav className="mx-auto flex max-w-7xl gap-1 px-6">
+        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-3 md:px-6">
           {navItems.map((item) => (
             <NavTab
               key={item.to}
@@ -111,7 +111,7 @@ export function AppShell({ pendingCount }: AppShellProps) {
       </header>
 
       {/* Content */}
-      <main className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto px-6 py-6">
+      <main className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto px-3 py-4 md:px-6 md:py-6">
         <Outlet />
       </main>
     </div>

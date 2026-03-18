@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Bot, Trash2, Plus, MessageSquare } from 'lucide-react'
+import { Send, Bot, Trash2, Plus, MessageSquare, Menu, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -46,6 +46,8 @@ interface SessionSidebarProps {
   onSelect: (id: string) => void
   onDelete: (id: string) => void
   onNew: () => void
+  open: boolean
+  onClose: () => void
 }
 
 function SessionSidebar({
@@ -54,63 +56,90 @@ function SessionSidebar({
   onSelect,
   onDelete,
   onNew,
+  open,
+  onClose,
 }: SessionSidebarProps) {
   return (
-    <div className="flex w-56 shrink-0 flex-col border-r border-border">
-      <div className="flex items-center justify-between px-3 py-3">
-        <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          History
-        </span>
-        <button
-          onClick={onNew}
-          title="New chat"
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-        </button>
-      </div>
+    <>
+      {/* Mobile backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={onClose}
+        />
+      )}
 
-      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pb-2">
-        {sessions.length === 0 ? (
-          <p className="px-2 py-4 text-center font-mono text-[11px] text-muted-foreground/60">
-            No history yet
-          </p>
-        ) : (
-          sessions.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onSelect(s.id)}
-              className={cn(
-                'group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors',
-                s.id === activeId
-                  ? 'bg-surface-hover text-foreground'
-                  : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
-              )}
-            >
-              <MessageSquare className="mt-0.5 size-3 shrink-0 opacity-50" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs leading-snug">
-                  {s.title ?? 'Untitled'}
-                </p>
-                <p className="mt-0.5 font-mono text-[10px] opacity-50">
-                  {relativeTime(s.updated_at)}
-                </p>
-              </div>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete(s.id)
-                }}
-                title="Delete"
-                className="mt-0.5 shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-              >
-                <Trash2 className="size-3" />
-              </span>
-            </button>
-          ))
+      <div
+        className={cn(
+          'flex w-56 shrink-0 flex-col border-r border-border bg-background',
+          'fixed inset-y-0 left-0 z-50 transition-transform duration-200 md:relative md:z-auto md:translate-x-0 md:transition-none',
+          open ? 'translate-x-0' : '-translate-x-full',
         )}
+      >
+        <div className="flex items-center justify-between px-3 py-3">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            History
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onNew}
+              title="New chat"
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+            >
+              <Plus className="size-3.5" />
+            </button>
+            <button
+              onClick={onClose}
+              title="Close sidebar"
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground md:hidden"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pb-2">
+          {sessions.length === 0 ? (
+            <p className="px-2 py-4 text-center font-mono text-[11px] text-muted-foreground/60">
+              No history yet
+            </p>
+          ) : (
+            sessions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onSelect(s.id)}
+                className={cn(
+                  'group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors',
+                  s.id === activeId
+                    ? 'bg-surface-hover text-foreground'
+                    : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
+                )}
+              >
+                <MessageSquare className="mt-0.5 size-3 shrink-0 opacity-50" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs leading-snug">
+                    {s.title ?? 'Untitled'}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[10px] opacity-50">
+                    {relativeTime(s.updated_at)}
+                  </p>
+                </div>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(s.id)
+                  }}
+                  title="Delete"
+                  className="mt-0.5 shrink-0 rounded p-0.5 opacity-50 transition-opacity hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+                >
+                  <Trash2 className="size-3" />
+                </span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -229,6 +258,7 @@ export default function Chat() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -425,15 +455,36 @@ export default function Chat() {
       <SessionSidebar
         sessions={sessions}
         activeId={activeSessionId}
-        onSelect={loadSession}
+        onSelect={(id) => {
+          loadSession(id)
+          setSidebarOpen(false)
+        }}
         onDelete={deleteSession}
-        onNew={startNewChat}
+        onNew={() => {
+          startNewChat()
+          setSidebarOpen(false)
+        }}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {/* Chat panel */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Mobile sidebar toggle */}
+        <div className="flex items-center border-b border-border px-3 py-2 md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+          >
+            <Menu className="size-4" />
+          </button>
+          <span className="ml-2 text-sm font-medium text-muted-foreground">
+            Chat
+          </span>
+        </div>
+
         {/* Messages */}
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-5 px-4">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 md:gap-4 md:px-4 md:py-5">
           {messages.map((msg, i) => (
             <div
               key={i}
@@ -443,13 +494,13 @@ export default function Chat() {
               )}
             >
               {msg.role === 'assistant' && (
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-purple-500">
-                  <Bot className="size-4 text-white" />
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-purple-500 md:size-9 md:rounded-xl">
+                  <Bot className="size-3 text-white md:size-4" />
                 </div>
               )}
               <div
                 className={cn(
-                  'max-w-[72%] px-4 py-3 sm:max-w-[60%]',
+                  'max-w-[85%] px-3 py-2.5 sm:max-w-[72%] sm:px-4 sm:py-3 md:max-w-[60%]',
                   msg.role === 'user'
                     ? 'rounded-[18px_18px_4px_18px] bg-primary text-primary-foreground'
                     : 'rounded-[18px_18px_18px_4px] border border-border bg-card',
@@ -482,7 +533,7 @@ export default function Chat() {
         </div>
 
         {/* Input bar */}
-        <div className="flex flex-col gap-2.5 border-t border-border px-4 pb-2 pt-4">
+        <div className="flex flex-col gap-2 border-t border-border px-3 pb-2 pt-3 md:gap-2.5 md:px-4 md:pt-4">
           <ModelSelector
             selected={model}
             models={models}
