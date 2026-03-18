@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BrainCircuit,
   ChevronDown,
+  ExternalLink,
   Github,
   GitBranch,
+  KeyRound,
   Lock,
   Plus,
   Search,
@@ -144,6 +146,8 @@ interface GitHubRepo {
   updatedAt: string
 }
 
+type GitHubAuthMode = 'oauth' | 'pat'
+
 function GitHubOAuthForm({
   onSave,
   onCancel,
@@ -153,16 +157,30 @@ function GitHubOAuthForm({
   onCancel: () => void
   saving: boolean
 }) {
+  const [mode, setMode] = useState<GitHubAuthMode>('oauth')
+
+  // OAuth state
   const [oauthToken, setOauthToken] = useState<string | null>(null)
   const [githubUser, setGithubUser] = useState<string | null>(null)
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const [oauthLoading, setOauthLoading] = useState(false)
   const [reposLoading, setReposLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [repoSearch, setRepoSearch] = useState('')
   const popupRef = useRef<Window | null>(null)
   const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // PAT state
+  const [patToken, setPatToken] = useState('')
+  const [patRepo, setPatRepo] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{
+    valid: boolean
+    detail: string
+  } | null>(null)
+
+  // Shared
+  const [error, setError] = useState<string | null>(null)
 
   const cleanupPopup = useCallback(() => {
     if (popupPollRef.current) {
@@ -194,21 +212,28 @@ function GitHubOAuthForm({
     }
   }, [cleanupPopup])
 
-  // Fetch repos once we have a token
-  useEffect(() => {
-    if (!oauthToken) return
+  // Fetch repos once we have an OAuth token
+  const fetchRepos = useCallback(async (token: string) => {
     setReposLoading(true)
-    fetch('/api/github/oauth/repos?per_page=100', {
-      headers: { Authorization: `Bearer ${oauthToken}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        setGithubUser(data.user)
-        setRepos(data.repos || [])
+    try {
+      const r = await fetch('/api/github/oauth/repos?per_page=100', {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .catch(() => setError('Failed to load repositories'))
-      .finally(() => setReposLoading(false))
-  }, [oauthToken])
+      const data = await r.json()
+      setGithubUser(data.user)
+      setRepos(data.repos || [])
+    } catch {
+      setError('Failed to load repositories')
+    } finally {
+      setReposLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (oauthToken) {
+      fetchRepos(oauthToken)
+    }
+  }, [oauthToken, fetchRepos])
 
   const handleConnect = async () => {
     setOauthLoading(true)
@@ -228,7 +253,6 @@ function GitHubOAuthForm({
       )
       popupRef.current = popup
 
-      // Poll for popup closed without completing auth
       popupPollRef.current = setInterval(() => {
         if (popup && popup.closed) {
           cleanupPopup()
@@ -244,11 +268,46 @@ function GitHubOAuthForm({
     }
   }
 
-  const handleSave = () => {
-    if (oauthToken && selectedRepo) {
-      onSave({ token: oauthToken, repo: selectedRepo })
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/github/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: patToken, repo: patRepo }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setTestResult({
+          valid: true,
+          detail: `Connected as @${data.user} to ${data.repoInfo.fullName}`,
+        })
+      } else {
+        setTestResult({
+          valid: false,
+          detail: data.error || 'Connection failed',
+        })
+      }
+    } catch {
+      setTestResult({ valid: false, detail: 'Network error' })
+    } finally {
+      setTesting(false)
     }
   }
+
+  const handleSave = () => {
+    if (mode === 'oauth' && oauthToken && selectedRepo) {
+      onSave({ token: oauthToken, repo: selectedRepo })
+    } else if (mode === 'pat' && patToken && patRepo) {
+      onSave({ token: patToken, repo: patRepo })
+    }
+  }
+
+  const canSave =
+    mode === 'oauth'
+      ? Boolean(oauthToken && selectedRepo)
+      : Boolean(patToken && patRepo)
 
   const filteredRepos = repos.filter((r) =>
     r.fullName.toLowerCase().includes(repoSearch.toLowerCase()),
@@ -256,100 +315,189 @@ function GitHubOAuthForm({
 
   return (
     <div className="space-y-3 p-4">
-      {!oauthToken ? (
-        /* Not connected — show Connect button */
-        <div className="flex flex-col items-center gap-3 py-4">
-          <button
-            type="button"
-            onClick={handleConnect}
-            disabled={oauthLoading}
-            className="flex items-center gap-2 rounded-lg bg-[#24292f] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {oauthLoading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Github className="size-4" />
-            )}
-            {oauthLoading ? 'Authorizing…' : 'Connect GitHub'}
-          </button>
-          <p className="text-xs text-muted-foreground">
-            Sign in with GitHub to select a repository
-          </p>
-        </div>
-      ) : (
-        /* Connected — show user + repo selector */
-        <>
-          <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-medium text-green-400">
-            <CheckCircle2 className="size-3.5 shrink-0" />
-            Connected as @{githubUser}
-          </div>
+      {/* Mode tabs */}
+      <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
+        <button
+          type="button"
+          onClick={() => setMode('oauth')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+            mode === 'oauth'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <Github className="size-3.5" />
+          Sign in with GitHub
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('pat')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+            mode === 'pat'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <KeyRound className="size-3.5" />
+          Access Token
+        </button>
+      </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Select repository
-            </label>
-            {reposLoading ? (
-              <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading repositories…
-              </div>
-            ) : (
-              <>
-                <div className="relative mb-2">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
-                  <input
-                    type="text"
-                    placeholder="Search repositories…"
-                    value={repoSearch}
-                    onChange={(e) => setRepoSearch(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
-                  />
+      {mode === 'oauth' ? (
+        /* ── OAuth flow ── */
+        !oauthToken ? (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <button
+              type="button"
+              onClick={handleConnect}
+              disabled={oauthLoading}
+              className="flex items-center gap-2 rounded-lg bg-[#24292f] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {oauthLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Github className="size-4" />
+              )}
+              {oauthLoading ? 'Authorizing…' : 'Connect GitHub'}
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Sign in with GitHub to select a repository
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-medium text-green-400">
+              <CheckCircle2 className="size-3.5 shrink-0" />
+              Connected as @{githubUser}
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Select repository
+              </label>
+              {reposLoading ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Loading repositories…
                 </div>
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
-                  {filteredRepos.length === 0 ? (
-                    <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                      No repositories found
-                    </p>
-                  ) : (
-                    filteredRepos.map((r) => (
-                      <button
-                        key={r.fullName}
-                        type="button"
-                        onClick={() => setSelectedRepo(r.fullName)}
-                        className={cn(
-                          'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50',
-                          selectedRepo === r.fullName &&
-                            'bg-primary/10 text-primary',
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate font-medium">
-                              {r.fullName}
-                            </span>
-                            {r.private && (
-                              <Lock className="size-3 shrink-0 text-muted-foreground" />
+              ) : (
+                <>
+                  <div className="relative mb-2">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                    <input
+                      type="text"
+                      placeholder="Search repositories…"
+                      value={repoSearch}
+                      onChange={(e) => setRepoSearch(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
+                    {filteredRepos.length === 0 ? (
+                      <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                        No repositories found
+                      </p>
+                    ) : (
+                      filteredRepos.map((r) => (
+                        <button
+                          key={r.fullName}
+                          type="button"
+                          onClick={() => setSelectedRepo(r.fullName)}
+                          className={cn(
+                            'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50',
+                            selectedRepo === r.fullName &&
+                              'bg-primary/10 text-primary',
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">
+                                {r.fullName}
+                              </span>
+                              {r.private && (
+                                <Lock className="size-3 shrink-0 text-muted-foreground" />
+                              )}
+                            </div>
+                            {r.description && (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {r.description}
+                              </p>
                             )}
                           </div>
-                          {r.description && (
-                            <p className="truncate text-xs text-muted-foreground">
-                              {r.description}
-                            </p>
+                          {r.language && (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {r.language}
+                            </span>
                           )}
-                        </div>
-                        {r.language && (
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {r.language}
-                          </span>
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )
+      ) : (
+        /* ── PAT flow ── */
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Repository
+            </label>
+            <input
+              type="text"
+              placeholder="org/repo"
+              value={patRepo}
+              onChange={(e) => setPatRepo(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
+            />
           </div>
-        </>
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">
+                Personal Access Token
+              </label>
+              <a
+                href="https://github.com/settings/tokens"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+              >
+                Generate token
+                <ExternalLink className="size-2.5" />
+              </a>
+            </div>
+            <input
+              type="password"
+              placeholder="ghp_..."
+              value={patToken}
+              onChange={(e) => setPatToken(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors"
+            />
+          </div>
+
+          {/* Test result */}
+          {testResult && (
+            <div
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium',
+                testResult.valid
+                  ? 'bg-green-500/10 text-green-400'
+                  : 'bg-red-500/10 text-red-400',
+              )}
+            >
+              {testResult.valid ? (
+                <CheckCircle2 className="size-3.5 shrink-0" />
+              ) : (
+                <XCircle className="size-3.5 shrink-0" />
+              )}
+              {testResult.detail}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Error */}
@@ -369,10 +517,21 @@ function GitHubOAuthForm({
         >
           Cancel
         </button>
+        {mode === 'pat' && (
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing || !patToken || !patRepo}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            {testing && <Loader2 className="size-3.5 animate-spin" />}
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+        )}
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving || !oauthToken || !selectedRepo}
+          disabled={saving || !canSave}
           className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save connector'}
