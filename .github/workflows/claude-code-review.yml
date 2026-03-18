@@ -5,6 +5,9 @@ on:
     types: [opened, synchronize]
     branches:
       - main
+    paths:
+      - 'server/**'
+      - 'forge-fe/**'
 
 jobs:
   claude-review:
