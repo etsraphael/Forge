@@ -5,9 +5,6 @@ on:
     types: [opened, synchronize]
     branches:
       - main
-    paths:
-      - 'server/**'
-      - 'forge-fe/**'
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
@@ -66,12 +63,9 @@ jobs:
             - No eval() or unsafe dynamic code execution
 
             Provide specific, actionable feedback on any issues found.
-            When your review is complete, output the full review as your final response.
-            The review will be automatically posted as a PR comment.
-            Do NOT attempt to post comments yourself using gh commands.
+            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
-          use_sticky_comment: "true"
-          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
 
       - name: Run Claude Code Review for Frontend
         if: steps.changes.outputs.frontend == 'true'
@@ -104,9 +98,6 @@ jobs:
             - Proper error boundaries and user feedback
 
             Provide specific, actionable feedback on any issues found.
-            When your review is complete, output the full review as your final response.
-            The review will be automatically posted as a PR comment.
-            Do NOT attempt to post comments yourself using gh commands.
+            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
-          use_sticky_comment: "true"
-          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
