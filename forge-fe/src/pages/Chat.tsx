@@ -14,6 +14,11 @@ interface Message {
   taskAction?: TaskActionResult
 }
 
+let msgCounter = 0
+function nextMsgId(): string {
+  return `msg-${Date.now()}-${++msgCounter}`
+}
+
 function stripActionBlocks(content: string): string {
   return content.replace(/~~~forge-action[\s\S]*?~~~/g, '').trim()
 }
@@ -32,7 +37,7 @@ interface ChatSession {
 
 const INITIAL_MESSAGES: Message[] = [
   {
-    id: crypto.randomUUID(),
+    id: nextMsgId(),
     role: 'assistant',
     content:
       "Hey! I'm your Forge AI assistant. I can help you with tasks, answer questions about your projects, or just chat. What's on your mind?",
@@ -270,6 +275,7 @@ export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     fetch('/api/chat/models')
@@ -326,7 +332,7 @@ export default function Chat() {
             rows
               .filter((r) => r.role !== 'system')
               .map((r) => ({
-                id: crypto.randomUUID(),
+                id: nextMsgId(),
                 role: r.role as 'user' | 'assistant',
                 content: r.content,
                 model: r.model,
@@ -358,15 +364,16 @@ export default function Chat() {
     const text = input.trim()
     const history = [
       ...messages,
-      { id: crypto.randomUUID(), role: 'user' as const, content: text },
+      { id: nextMsgId(), role: 'user' as const, content: text },
     ]
     setMessages(history)
     setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setIsGenerating(true)
 
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), role: 'assistant', content: '', model },
+      { id: nextMsgId(), role: 'assistant', content: '', model },
     ])
 
     try {
@@ -585,19 +592,27 @@ export default function Chat() {
             onChange={setModel}
           />
 
-          <div className="flex items-center gap-2.5">
-            <div className="flex flex-1 items-center rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
-              <input
+          <div className="flex items-end gap-2.5">
+            <div className="flex flex-1 items-end rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
+              <textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  const ta = e.target
+                  ta.style.height = 'auto'
+                  ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     handleSend()
                   }
                 }}
+                rows={1}
                 placeholder="Ask anything about your project…"
-                className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                className="flex-1 resize-none bg-transparent text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+                style={{ maxHeight: 200 }}
               />
             </div>
             <button
