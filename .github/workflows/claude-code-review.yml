@@ -66,9 +66,10 @@ jobs:
             - No eval() or unsafe dynamic code execution
 
             Provide specific, actionable feedback on any issues found.
-            Do NOT use `gh pr comment` — the action will post your review automatically.
+            When your review is complete, post exactly ONE `gh pr comment` with the full review.
+            Do NOT post placeholder, incremental, or partial comments — only post once with the final review.
 
-          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
 
       - name: Run Claude Code Review for Frontend
         if: steps.changes.outputs.frontend == 'true'
@@ -101,6 +102,7 @@ jobs:
             - Proper error boundaries and user feedback
 
             Provide specific, actionable feedback on any issues found.
-            Do NOT use `gh pr comment` — the action will post your review automatically.
+            When your review is complete, post exactly ONE `gh pr comment` with the full review.
+            Do NOT post placeholder, incremental, or partial comments — only post once with the final review.
 
-          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
