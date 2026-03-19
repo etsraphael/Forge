@@ -9,6 +9,10 @@ on:
       - 'server/**'
       - 'forge-fe/**'
 
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
     if: github.event.pull_request.draft == false
@@ -62,9 +66,9 @@ jobs:
             - No eval() or unsafe dynamic code execution
 
             Provide specific, actionable feedback on any issues found.
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            Do NOT use `gh pr comment` — the action will post your review automatically.
 
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read"'
+          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
 
       - name: Run Claude Code Review for Frontend
         if: steps.changes.outputs.frontend == 'true'
@@ -97,6 +101,6 @@ jobs:
             - Proper error boundaries and user feedback
 
             Provide specific, actionable feedback on any issues found.
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            Do NOT use `gh pr comment` — the action will post your review automatically.
 
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read"'
+          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Read"'
