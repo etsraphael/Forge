@@ -139,7 +139,8 @@ function SessionSidebar({
                     {relativeTime(s.updated_at)}
                   </p>
                 </div>
-                <span
+                <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation()
                     onDelete(s.id)
@@ -148,7 +149,7 @@ function SessionSidebar({
                   className="mt-0.5 shrink-0 rounded p-0.5 opacity-50 transition-opacity hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
                 >
                   <Trash2 className="size-3" />
-                </span>
+                </button>
               </button>
             ))
           )}
@@ -402,63 +403,64 @@ export default function Chat() {
         buffer = lines.pop() ?? ''
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
+          let event: Record<string, unknown>
           try {
-            const event = JSON.parse(line.slice(6))
-            if (event.type === 'session' && event.session_id) {
-              savedSessionId = event.session_id
-              setActiveSessionId(event.session_id)
-              // Prepend new session to sidebar if it's new
-              if (!activeSessionId) {
-                const title = text.slice(0, 60)
-                setSessions((prev) => [
-                  {
-                    id: event.session_id,
-                    title,
-                    updated_at: new Date().toISOString(),
-                  },
-                  ...prev,
-                ])
-              } else {
-                // Update updated_at for existing session
-                setSessions((prev) =>
-                  prev.map((s) =>
-                    s.id === event.session_id
-                      ? { ...s, updated_at: new Date().toISOString() }
-                      : s,
-                  ),
-                )
-              }
-            } else if (event.type === 'token' && event.token) {
-              setMessages((prev) => {
-                const last = prev[prev.length - 1]
-                return [
-                  ...prev.slice(0, -1),
-                  { ...last, content: last.content + event.token },
-                ]
-              })
-            } else if (event.type === 'task_action') {
-              setMessages((prev) => {
-                const last = prev[prev.length - 1]
-                return [
-                  ...prev.slice(0, -1),
-                  {
-                    ...last,
-                    content: stripActionBlocks(last.content),
-                    taskAction: {
-                      success: event.success,
-                      action: event.action,
-                      task: event.task,
-                      deletedTask: event.deletedTask,
-                      error: event.error,
-                    } as TaskActionResult,
-                  },
-                ]
-              })
-            } else if (event.type === 'error') {
-              throw new Error(event.error)
-            }
+            event = JSON.parse(line.slice(6))
           } catch {
-            // skip malformed line
+            continue // skip malformed line
+          }
+          if (event.type === 'error') {
+            throw new Error(event.error as string)
+          } else if (event.type === 'session' && event.session_id) {
+            savedSessionId = event.session_id as string
+            setActiveSessionId(event.session_id as string)
+            // Prepend new session to sidebar if it's new
+            if (!activeSessionId) {
+              const title = text.slice(0, 60)
+              setSessions((prev) => [
+                {
+                  id: event.session_id as string,
+                  title,
+                  updated_at: new Date().toISOString(),
+                },
+                ...prev,
+              ])
+            } else {
+              // Update updated_at for existing session
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.id === event.session_id
+                    ? { ...s, updated_at: new Date().toISOString() }
+                    : s,
+                ),
+              )
+            }
+          } else if (event.type === 'token' && event.token) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              return [
+                ...prev.slice(0, -1),
+                { ...last, content: last.content + (event.token as string) },
+              ]
+            })
+          } else if (event.type === 'task_action') {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              return [
+                ...prev.slice(0, -1),
+                {
+                  ...last,
+                  content: stripActionBlocks(last.content),
+                  taskAction: {
+                    success: event.success,
+                    action: event.action,
+                    task: event.task,
+                    deletedTask: event.deletedTask,
+                    error: event.error,
+                  } as TaskActionResult,
+                },
+              ]
+            })
           }
         }
       }

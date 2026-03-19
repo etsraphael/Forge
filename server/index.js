@@ -9,6 +9,7 @@ import connectorsRouter from './routes/connectors.js'
 import githubRouter from './routes/github.js'
 import githubOAuthRouter from './routes/githubOAuth.js'
 import localGitRouter from './routes/local-git.js'
+import executeRouter from './routes/execute.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isProd = process.env.NODE_ENV === 'production'
@@ -32,6 +33,7 @@ app.use('/api/connectors', connectorsRouter)
 app.use('/api/github/oauth', githubOAuthRouter)
 app.use('/api/github', githubRouter)
 app.use('/api/local-git', localGitRouter)
+app.use('/api/tasks', executeRouter)
 
 app.get('/api/health', async (_req, res) => {
   try {

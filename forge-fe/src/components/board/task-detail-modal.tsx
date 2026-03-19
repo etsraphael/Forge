@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import {
   X,
@@ -10,10 +10,17 @@ import {
   Loader2,
   Pencil,
   Trash2,
+  Terminal,
+  Square,
   type LucideIcon,
 } from 'lucide-react'
 
-import type { BoardTask, TaskType, TaskPriority } from '@/types'
+import type {
+  BoardTask,
+  TaskType,
+  TaskPriority,
+  ExecutionStatus,
+} from '@/types'
 import { cn } from '@/lib/utils'
 import { PriorityDot } from '@/components/ui/priority-dot'
 import { TypeIcon } from '@/components/ui/type-icon'
@@ -108,6 +115,126 @@ export function TaskDetailModal({
   const [editPriority, setEditPriority] = useState<TaskPriority>('medium')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [executionStatus, setExecutionStatus] = useState<
+    ExecutionStatus | 'idle'
+  >('idle')
+  const [executionOutput, setExecutionOutput] = useState<
+    Array<{ type: string; content: string }>
+  >([])
+  const [, setExecutionId] = useState<string | null>(null)
+  const outputRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll execution output
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    }
+  }, [executionOutput])
+
+  const handleExecute = useCallback(async () => {
+    if (!task) return
+    setExecutionStatus('running')
+    setExecutionOutput([])
+    setExecutionId(null)
+
+    try {
+      const response = await fetch(`/api/tasks/${task.id}/execute`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const err = await response.json()
+        setExecutionOutput([
+          { type: 'error', content: err.error || 'Failed to start execution' },
+        ])
+        setExecutionStatus('failed')
+        return
+      }
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop()!
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+
+            if (event.type === 'execution_start') {
+              setExecutionId(event.execution_id)
+              setExecutionOutput((prev) => [
+                ...prev,
+                { type: 'system', content: 'Execution started...' },
+              ])
+            } else if (event.type === 'assistant' && event.message?.content) {
+              for (const block of event.message.content) {
+                if (block.type === 'text' && block.text) {
+                  setExecutionOutput((prev) => [
+                    ...prev,
+                    { type: 'assistant', content: block.text },
+                  ])
+                }
+              }
+            } else if (event.type === 'tool_use') {
+              setExecutionOutput((prev) => [
+                ...prev,
+                {
+                  type: 'tool',
+                  content: `Using tool: ${event.tool?.name || event.name || 'unknown'}`,
+                },
+              ])
+            } else if (event.type === 'result') {
+              if (event.result) {
+                setExecutionOutput((prev) => [
+                  ...prev,
+                  { type: 'result', content: event.result },
+                ])
+              }
+            } else if (event.type === 'done') {
+              setExecutionStatus('completed')
+            } else if (event.type === 'error') {
+              setExecutionOutput((prev) => [
+                ...prev,
+                { type: 'error', content: event.error || 'Unknown error' },
+              ])
+              setExecutionStatus('failed')
+            }
+          } catch {
+            // skip malformed JSON
+          }
+        }
+      }
+
+      // If we exited the loop without explicit done/error
+      setExecutionStatus((prev) => (prev === 'running' ? 'completed' : prev))
+    } catch (err) {
+      setExecutionOutput((prev) => [
+        ...prev,
+        {
+          type: 'error',
+          content: err instanceof Error ? err.message : 'Connection failed',
+        },
+      ])
+      setExecutionStatus('failed')
+    }
+  }, [task])
+
+  const handleCancelExecution = useCallback(async () => {
+    if (!task) return
+    try {
+      await fetch(`/api/tasks/${task.id}/execute/cancel`, { method: 'POST' })
+      setExecutionStatus('cancelled')
+    } catch {
+      // ignore
+    }
+  }, [task])
 
   if (!task) return null
 
@@ -197,6 +324,9 @@ export function TaskDetailModal({
     setRunningCommand(null)
     setCommandOutput(null)
     setIsEditing(false)
+    setExecutionStatus('idle')
+    setExecutionOutput([])
+    setExecutionId(null)
     onClose()
   }
 
@@ -319,6 +449,84 @@ export function TaskDetailModal({
                     </p>
                   )}
 
+                  {/* Execute with Claude Code */}
+                  {task.description && (
+                    <div className="mt-6">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Execute
+                      </h3>
+                      <div className="mt-3">
+                        {executionStatus === 'running' ? (
+                          <button
+                            onClick={handleCancelExecution}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+                          >
+                            <Square className="size-4" />
+                            Cancel Execution
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleExecute}
+                            disabled={runningCommand !== null}
+                            className={cn(
+                              'flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary transition-colors',
+                              'hover:bg-primary/20',
+                              'disabled:pointer-events-none disabled:opacity-50',
+                            )}
+                          >
+                            <Terminal className="size-4" />
+                            Execute with Claude Code
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Execution Output */}
+                      {executionOutput.length > 0 && (
+                        <div
+                          ref={outputRef}
+                          className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-border bg-zinc-950 p-4 font-mono text-sm"
+                        >
+                          {executionStatus === 'completed' && (
+                            <div className="mb-2 text-xs font-medium text-emerald-400">
+                              Completed
+                            </div>
+                          )}
+                          {executionStatus === 'failed' && (
+                            <div className="mb-2 text-xs font-medium text-red-400">
+                              Failed
+                            </div>
+                          )}
+                          {executionStatus === 'cancelled' && (
+                            <div className="mb-2 text-xs font-medium text-yellow-400">
+                              Cancelled
+                            </div>
+                          )}
+                          {executionOutput.map((entry, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                'whitespace-pre-wrap break-words',
+                                entry.type === 'error' && 'text-red-400',
+                                entry.type === 'system' && 'text-zinc-500',
+                                entry.type === 'tool' && 'text-yellow-400',
+                                entry.type === 'assistant' && 'text-zinc-200',
+                                entry.type === 'result' && 'text-emerald-400',
+                              )}
+                            >
+                              {entry.content}
+                            </div>
+                          ))}
+                          {executionStatus === 'running' && (
+                            <div className="mt-1 flex items-center gap-2 text-zinc-500">
+                              <Loader2 className="size-3 animate-spin" />
+                              Running...
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* AI Commands */}
                   <div className="mt-6">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -331,7 +539,10 @@ export function TaskDetailModal({
                         return (
                           <button
                             key={cmd.id}
-                            disabled={runningCommand !== null}
+                            disabled={
+                              runningCommand !== null ||
+                              executionStatus === 'running'
+                            }
                             onClick={() => handleRunCommand(cmd)}
                             className={cn(
                               'flex flex-col items-start gap-1 rounded-lg border border-border p-3 text-left transition-colors',

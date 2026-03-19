@@ -59,6 +59,20 @@ export function initDB() {
 
     CREATE INDEX IF NOT EXISTS idx_board_tasks_column
       ON board_tasks(column_id, sort_order);
+
+    CREATE TABLE IF NOT EXISTS task_executions (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+      prompt TEXT NOT NULL,
+      output TEXT NOT NULL DEFAULT '',
+      error TEXT,
+      started_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_executions_task
+      ON task_executions(task_id, started_at DESC);
   `)
 
   // Seed initial tasks if table is empty

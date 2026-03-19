@@ -94,6 +94,21 @@ export interface TaskActionResult {
   error?: string
 }
 
+// ── Task Executions (Claude Code) ──
+
+export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface TaskExecution {
+  id: string
+  task_id: string
+  status: ExecutionStatus
+  prompt: string
+  output: string
+  error?: string
+  started_at: string
+  completed_at?: string
+}
+
 // ── Activity ──
 
 export type ActivityAction =
