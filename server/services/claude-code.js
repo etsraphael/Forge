@@ -84,6 +84,7 @@ async function* spawnClaudeStream(cwd, prompt, signal) {
     [
       '-p', prompt,
       '--output-format', 'stream-json',
+      '--verbose',
       '--dangerously-skip-permissions',
     ],
     {
