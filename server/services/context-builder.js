@@ -45,6 +45,55 @@ function formatRelativeTime(dateStr) {
   return `${days}d ago`
 }
 
+// --- Baseline context (always included with classification path) ---
+
+async function buildBaselineContext(db) {
+  const parts = []
+
+  // Task board summary counts
+  const counts = db
+    .prepare(
+      'SELECT column_id, COUNT(*) as count FROM board_tasks GROUP BY column_id',
+    )
+    .all()
+  if (counts.length > 0) {
+    const summary = counts
+      .map((c) => `${c.count} ${columnLabels[c.column_id] || c.column_id}`)
+      .join(', ')
+    parts.push(`**Task Board:** ${summary}`)
+  }
+
+  // Repo identity (GitHub or local git)
+  const github = getFirstGitHubService(db)
+  if (github) {
+    try {
+      const repo = await github.getRepository()
+      parts.push(
+        `**Repository:** ${repo.fullName}` +
+          (repo.description ? ` — ${repo.description}` : '') +
+          (repo.language ? ` (${repo.language})` : ''),
+      )
+    } catch {
+      // GitHub unavailable — fall through to local git
+    }
+  }
+  if (!github) {
+    const localGit = getFirstLocalGitService(db)
+    if (localGit) {
+      try {
+        const repo = localGit.getRepository()
+        parts.push(
+          `**Repository:** ${repo.name} (${repo.currentBranch} branch)`,
+        )
+      } catch {
+        // Local git unavailable
+      }
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n') + '\n\n' : ''
+}
+
 // --- Task context builders ---
 
 function buildFilteredTaskContext(db) {
@@ -352,14 +401,43 @@ function fetchFilteredLocalGitContext(db, flags) {
  * Build selective system context for the AI.
  * @param {object} db - Database instance
  * @param {object} [options]
- * @param {object} [options.relevance] - Output from detectRelevance()
+ * @param {object} [options.classification] - Output from classifyIntent() (LLM-based)
+ * @param {object} [options.relevance] - Output from detectRelevance() (keyword-based, legacy)
  * @param {'chat'|'task-command'} [options.mode] - Context mode
  * @param {object} [options.task] - The specific task (for task-command mode)
  */
-export async function buildContext(db, { relevance, mode, task } = {}) {
+export async function buildContext(
+  db,
+  { classification, relevance, mode, task } = {},
+) {
   // Task-command mode: lightweight context only
   if (mode === 'task-command' && task) {
     return buildTaskCommandContext(db, task)
+  }
+
+  // LLM classification-based path: baseline always included, detailed sections gated by intent
+  if (classification) {
+    const baseline = await buildBaselineContext(db)
+    const fetches = []
+    if (classification.tasks) fetches.push(buildFilteredTaskContext(db))
+    if (classification.github) {
+      fetches.push(
+        fetchFilteredGitHubContext(db, {
+          repo: true,
+          commits: true,
+          issues: true,
+          prs: true,
+        }),
+      )
+      fetches.push(
+        fetchFilteredLocalGitContext(db, { repo: true, commits: true }),
+      )
+    }
+    const parts = await Promise.all(fetches)
+    const crudInstructions = classification.tasks
+      ? buildTaskCrudInstructions()
+      : ''
+    return PREAMBLE_FULL + baseline + parts.join('') + crudInstructions
   }
 
   // No relevance provided (backward compat): include everything
@@ -384,7 +462,7 @@ export async function buildContext(db, { relevance, mode, task } = {}) {
     )
   }
 
-  // Relevance-based: only include what's needed
+  // Keyword relevance-based path (legacy fallback)
   const needsTasks = relevance.tasks
   const gh = relevance.github
   const anyRepo = gh && (gh.repo || gh.commits || gh.issues || gh.prs)

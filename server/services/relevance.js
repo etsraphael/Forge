@@ -63,8 +63,39 @@ const repoPatterns = [
 const hashNumberPattern = /#\d+/
 
 /**
- * Detect which context sections are relevant to the user's message.
- * Pure function — synchronous, no side effects.
+ * Use the LLM itself to classify what context the user's message needs.
+ * Language-agnostic, typo-tolerant — replaces keyword matching for chat context.
+ * Falls back to including everything if classification fails.
+ */
+export async function classifyIntent(provider, model, userMessage) {
+  const systemPrompt =
+    'You classify user messages for a project management dashboard. ' +
+    'Return ONLY a JSON object: {"tasks": boolean, "github": boolean}\n' +
+    '- tasks: true if about work items, progress, priorities, planning, improvements, or project health\n' +
+    '- github: true if about code, repository, issues, pull requests, commits, or technical details\n' +
+    'Return {"tasks": false, "github": false} for casual or unrelated messages.'
+
+  try {
+    const { content } = await provider.complete({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0,
+    })
+
+    const match = content.match(/\{[^}]+\}/)
+    if (match) return JSON.parse(match[0])
+  } catch {
+    // Classification failed — fall back to including everything
+  }
+
+  return { tasks: true, github: true }
+}
+
+/**
+ * Keyword-based relevance detection (legacy, kept as fallback).
  */
 export function detectRelevance(userMessage) {
   const msg = (userMessage || '').toLowerCase()
