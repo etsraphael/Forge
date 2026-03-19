@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { OllamaProvider } from '../providers/ollama.js'
 import { buildContext } from '../services/context-builder.js'
-import { detectRelevance } from '../services/relevance.js'
+import { classifyIntent } from '../services/relevance.js'
 import { getTaskPrompt } from '../services/task-prompts.js'
 import { parseActions } from '../services/action-parser.js'
 import { executeAction } from '../services/action-executor.js'
@@ -98,9 +98,13 @@ router.post('/completions', async (req, res) => {
 
     send({ type: 'session', session_id: sessionId })
 
-    // Inject system context selectively based on what the user is asking about
-    const relevance = detectRelevance(lastUserMsg?.content || '')
-    const context = await buildContext(db, { relevance, mode: 'chat' })
+    // Use LLM to classify what context the user's message needs (language-agnostic)
+    const classification = await classifyIntent(
+      provider,
+      model,
+      lastUserMsg?.content || '',
+    )
+    const context = await buildContext(db, { classification, mode: 'chat' })
     const augmentedMessages = context
       ? [{ role: 'system', content: context }, ...messages]
       : messages
