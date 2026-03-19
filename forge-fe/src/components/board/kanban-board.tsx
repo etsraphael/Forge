@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -43,6 +43,10 @@ function mapTask(raw: RawTask): BoardTask {
 
 export function KanbanBoard() {
   const [tasks, setTasks] = useState<BoardTask[]>([])
+  const tasksRef = useRef(tasks)
+  useEffect(() => {
+    tasksRef.current = tasks
+  }, [tasks])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null)
 
@@ -123,7 +127,7 @@ export function KanbanBoard() {
     const isOverColumn = boardColumns.some((c) => c.id === overId)
 
     if (isOverColumn) {
-      persistReorder(tasks)
+      persistReorder(tasksRef.current)
       return
     }
 

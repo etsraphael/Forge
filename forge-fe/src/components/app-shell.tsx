@@ -82,6 +82,7 @@ export function AppShell({ pendingCount }: AppShellProps) {
             </div>
             <NavLink
               to="/settings"
+              aria-label="Settings"
               className={({ isActive }) =>
                 cn(
                   'rounded-lg p-1.5 transition-colors',

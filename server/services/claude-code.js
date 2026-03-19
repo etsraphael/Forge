@@ -11,17 +11,14 @@ const activeExecutions = new Map()
  * yielding parsed JSON messages from Claude Code's stream-json output.
  */
 export function executeTask(db, taskId) {
-  const task = db
-    .prepare('SELECT * FROM board_tasks WHERE id = ?')
-    .get(taskId)
+  const task = db.prepare('SELECT * FROM board_tasks WHERE id = ?').get(taskId)
   if (!task) {
     throw Object.assign(new Error('Task not found'), { status: 404 })
   }
   if (!task.description || !task.description.trim()) {
-    throw Object.assign(
-      new Error('Task has no description to execute'),
-      { status: 400 },
-    )
+    throw Object.assign(new Error('Task has no description to execute'), {
+      status: 400,
+    })
   }
 
   const localGit = getFirstLocalGitService(db)
@@ -82,8 +79,10 @@ async function* spawnClaudeStream(cwd, prompt, signal) {
   const child = spawn(
     'claude',
     [
-      '-p', prompt,
-      '--output-format', 'stream-json',
+      '-p',
+      prompt,
+      '--output-format',
+      'stream-json',
       '--verbose',
       '--dangerously-skip-permissions',
     ],
@@ -97,7 +96,6 @@ async function* spawnClaudeStream(cwd, prompt, signal) {
   let buffer = ''
   const messageQueue = []
   let resolve = null
-  let done = false
   let exitError = null
 
   function enqueue(item) {
@@ -144,7 +142,6 @@ async function* spawnClaudeStream(cwd, prompt, signal) {
 
   child.on('error', (err) => {
     exitError = err
-    done = true
     enqueue({ type: 'end' })
   })
 
@@ -161,7 +158,6 @@ async function* spawnClaudeStream(cwd, prompt, signal) {
     if (code !== 0 && code !== null) {
       exitError = new Error(`claude exited with code ${code}`)
     }
-    done = true
     enqueue({ type: 'end' })
   })
 

@@ -15,7 +15,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-import type { BoardTask, TaskType, TaskPriority, ExecutionStatus } from '@/types'
+import type {
+  BoardTask,
+  TaskType,
+  TaskPriority,
+  ExecutionStatus,
+} from '@/types'
 import { cn } from '@/lib/utils'
 import { PriorityDot } from '@/components/ui/priority-dot'
 import { TypeIcon } from '@/components/ui/type-icon'
@@ -110,9 +115,13 @@ export function TaskDetailModal({
   const [editPriority, setEditPriority] = useState<TaskPriority>('medium')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [executionStatus, setExecutionStatus] = useState<ExecutionStatus | 'idle'>('idle')
-  const [executionOutput, setExecutionOutput] = useState<Array<{ type: string; content: string }>>([])
-  const [executionId, setExecutionId] = useState<string | null>(null)
+  const [executionStatus, setExecutionStatus] = useState<
+    ExecutionStatus | 'idle'
+  >('idle')
+  const [executionOutput, setExecutionOutput] = useState<
+    Array<{ type: string; content: string }>
+  >([])
+  const [, setExecutionId] = useState<string | null>(null)
   const outputRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll execution output
@@ -135,7 +144,9 @@ export function TaskDetailModal({
 
       if (!response.ok) {
         const err = await response.json()
-        setExecutionOutput([{ type: 'error', content: err.error || 'Failed to start execution' }])
+        setExecutionOutput([
+          { type: 'error', content: err.error || 'Failed to start execution' },
+        ])
         setExecutionStatus('failed')
         return
       }
@@ -174,7 +185,10 @@ export function TaskDetailModal({
             } else if (event.type === 'tool_use') {
               setExecutionOutput((prev) => [
                 ...prev,
-                { type: 'tool', content: `Using tool: ${event.tool?.name || event.name || 'unknown'}` },
+                {
+                  type: 'tool',
+                  content: `Using tool: ${event.tool?.name || event.name || 'unknown'}`,
+                },
               ])
             } else if (event.type === 'result') {
               if (event.result) {
@@ -203,7 +217,10 @@ export function TaskDetailModal({
     } catch (err) {
       setExecutionOutput((prev) => [
         ...prev,
-        { type: 'error', content: err instanceof Error ? err.message : 'Connection failed' },
+        {
+          type: 'error',
+          content: err instanceof Error ? err.message : 'Connection failed',
+        },
       ])
       setExecutionStatus('failed')
     }
