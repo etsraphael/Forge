@@ -3,11 +3,24 @@ import { Send, Bot, Trash2, Plus, MessageSquare, Menu, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { MarkdownContent } from '@/components/chat/markdown-content'
+import { TaskActionCard } from '@/components/chat/task-action-card'
+import type { TaskActionResult } from '@/types'
 
 interface Message {
+  id: string
   role: 'user' | 'assistant'
   content: string
   model?: string
+  taskAction?: TaskActionResult
+}
+
+let msgCounter = 0
+function nextMsgId(): string {
+  return `msg-${Date.now()}-${++msgCounter}`
+}
+
+function stripActionBlocks(content: string): string {
+  return content.replace(/~~~forge-action[\s\S]*?~~~/g, '').trim()
 }
 
 interface Model {
@@ -24,6 +37,7 @@ interface ChatSession {
 
 const INITIAL_MESSAGES: Message[] = [
   {
+    id: nextMsgId(),
     role: 'assistant',
     content:
       "Hey! I'm your Forge AI assistant. I can help you with tasks, answer questions about your projects, or just chat. What's on your mind?",
@@ -261,6 +275,7 @@ export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     fetch('/api/chat/models')
@@ -317,6 +332,7 @@ export default function Chat() {
             rows
               .filter((r) => r.role !== 'system')
               .map((r) => ({
+                id: nextMsgId(),
                 role: r.role as 'user' | 'assistant',
                 content: r.content,
                 model: r.model,
@@ -346,12 +362,19 @@ export default function Chat() {
   async function handleSend() {
     if (!input.trim() || isGenerating || !model) return
     const text = input.trim()
-    const history = [...messages, { role: 'user' as const, content: text }]
+    const history = [
+      ...messages,
+      { id: nextMsgId(), role: 'user' as const, content: text },
+    ]
     setMessages(history)
     setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setIsGenerating(true)
 
-    setMessages((prev) => [...prev, { role: 'assistant', content: '', model }])
+    setMessages((prev) => [
+      ...prev,
+      { id: nextMsgId(), role: 'assistant', content: '', model },
+    ])
 
     try {
       const res = await fetch('/api/chat/completions', {
@@ -411,6 +434,24 @@ export default function Chat() {
                 return [
                   ...prev.slice(0, -1),
                   { ...last, content: last.content + event.token },
+                ]
+              })
+            } else if (event.type === 'task_action') {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1]
+                return [
+                  ...prev.slice(0, -1),
+                  {
+                    ...last,
+                    content: stripActionBlocks(last.content),
+                    taskAction: {
+                      success: event.success,
+                      action: event.action,
+                      task: event.task,
+                      deletedTask: event.deletedTask,
+                      error: event.error,
+                    } as TaskActionResult,
+                  },
                 ]
               })
             } else if (event.type === 'error') {
@@ -474,6 +515,7 @@ export default function Chat() {
         {/* Mobile sidebar toggle */}
         <div className="flex items-center border-b border-border px-3 py-2 md:hidden">
           <button
+            aria-label="Open sidebar"
             onClick={() => setSidebarOpen(true)}
             className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
           >
@@ -488,7 +530,7 @@ export default function Chat() {
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 md:gap-4 md:px-4 md:py-5">
           {messages.map((msg, i) => (
             <div
-              key={i}
+              key={msg.id}
               className={cn(
                 'flex items-start gap-3',
                 msg.role === 'user' ? 'flex-row-reverse' : 'flex-row',
@@ -516,6 +558,9 @@ export default function Chat() {
                     <MarkdownContent content={msg.content} />
                     {isGenerating && i === messages.length - 1 && (
                       <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
+                    )}
+                    {msg.taskAction && (
+                      <TaskActionCard result={msg.taskAction} />
                     )}
                   </div>
                 )}
@@ -547,19 +592,27 @@ export default function Chat() {
             onChange={setModel}
           />
 
-          <div className="flex items-center gap-2.5">
-            <div className="flex flex-1 items-center rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
-              <input
+          <div className="flex items-end gap-2.5">
+            <div className="flex flex-1 items-end rounded-xl border border-border bg-card px-4 py-3 transition-colors focus-within:border-primary/50">
+              <textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  const ta = e.target
+                  ta.style.height = 'auto'
+                  ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     handleSend()
                   }
                 }}
+                rows={1}
                 placeholder="Ask anything about your project…"
-                className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                className="flex-1 resize-none bg-transparent text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+                style={{ maxHeight: 200 }}
               />
             </div>
             <button
