@@ -87,7 +87,7 @@ export interface TaskActionResult {
     title: string
     type: string
     column_id: string
-    priority: string
+    priority: TaskPriority
     description: string
   }
   deletedTask?: { id: string; title: string }

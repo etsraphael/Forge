@@ -7,6 +7,7 @@ import { TaskActionCard } from '@/components/chat/task-action-card'
 import type { TaskActionResult } from '@/types'
 
 interface Message {
+  id: string
   role: 'user' | 'assistant'
   content: string
   model?: string
@@ -31,6 +32,7 @@ interface ChatSession {
 
 const INITIAL_MESSAGES: Message[] = [
   {
+    id: crypto.randomUUID(),
     role: 'assistant',
     content:
       "Hey! I'm your Forge AI assistant. I can help you with tasks, answer questions about your projects, or just chat. What's on your mind?",
@@ -324,6 +326,7 @@ export default function Chat() {
             rows
               .filter((r) => r.role !== 'system')
               .map((r) => ({
+                id: crypto.randomUUID(),
                 role: r.role as 'user' | 'assistant',
                 content: r.content,
                 model: r.model,
@@ -353,12 +356,18 @@ export default function Chat() {
   async function handleSend() {
     if (!input.trim() || isGenerating || !model) return
     const text = input.trim()
-    const history = [...messages, { role: 'user' as const, content: text }]
+    const history = [
+      ...messages,
+      { id: crypto.randomUUID(), role: 'user' as const, content: text },
+    ]
     setMessages(history)
     setInput('')
     setIsGenerating(true)
 
-    setMessages((prev) => [...prev, { role: 'assistant', content: '', model }])
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: 'assistant', content: '', model },
+    ])
 
     try {
       const res = await fetch('/api/chat/completions', {
@@ -428,7 +437,13 @@ export default function Chat() {
                   {
                     ...last,
                     content: stripActionBlocks(last.content),
-                    taskAction: event as unknown as TaskActionResult,
+                    taskAction: {
+                      success: event.success,
+                      action: event.action,
+                      task: event.task,
+                      deletedTask: event.deletedTask,
+                      error: event.error,
+                    } as TaskActionResult,
                   },
                 ]
               })
@@ -493,6 +508,7 @@ export default function Chat() {
         {/* Mobile sidebar toggle */}
         <div className="flex items-center border-b border-border px-3 py-2 md:hidden">
           <button
+            aria-label="Open sidebar"
             onClick={() => setSidebarOpen(true)}
             className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
           >
@@ -507,7 +523,7 @@ export default function Chat() {
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 md:gap-4 md:px-4 md:py-5">
           {messages.map((msg, i) => (
             <div
-              key={i}
+              key={msg.id}
               className={cn(
                 'flex items-start gap-3',
                 msg.role === 'user' ? 'flex-row-reverse' : 'flex-row',
@@ -532,13 +548,7 @@ export default function Chat() {
                   </p>
                 ) : (
                   <div className="chat-markdown">
-                    <MarkdownContent
-                      content={
-                        msg.taskAction
-                          ? stripActionBlocks(msg.content)
-                          : msg.content
-                      }
-                    />
+                    <MarkdownContent content={msg.content} />
                     {isGenerating && i === messages.length - 1 && (
                       <span className="ml-0.5 inline-block size-2 animate-pulse rounded-full bg-muted-foreground align-middle" />
                     )}
