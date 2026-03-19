@@ -429,7 +429,9 @@ export async function buildContext(
           prs: true,
         }),
       )
-      fetches.push(fetchFilteredLocalGitContext(db, { repo: true, commits: true }))
+      fetches.push(
+        fetchFilteredLocalGitContext(db, { repo: true, commits: true }),
+      )
     }
     const parts = await Promise.all(fetches)
     const crudInstructions = classification.tasks
