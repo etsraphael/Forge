@@ -5,6 +5,7 @@ import path from 'path'
 import { initDB } from './db.js'
 import chatRouter from './routes/chat.js'
 import tasksRouter from './routes/tasks.js'
+import projectsRouter from './routes/projects.js'
 import connectorsRouter from './routes/connectors.js'
 import githubRouter from './routes/github.js'
 import githubOAuthRouter from './routes/githubOAuth.js'
@@ -26,6 +27,7 @@ const db = initDB()
 app.set('db', db)
 app.set('ollamaUrl', ollamaUrl)
 
+app.use('/api/projects', projectsRouter)
 app.use('/api/chat', chatRouter)
 app.use('/api/tasks', tasksRouter)
 app.use('/api/connectors', connectorsRouter)

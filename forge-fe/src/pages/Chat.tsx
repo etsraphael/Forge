@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Bot, Trash2, Plus, MessageSquare, Menu, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { useProject } from '@/contexts/project-context'
 import { relativeTime } from '@/lib/format'
 import { MarkdownContent } from '@/components/chat/markdown-content'
 import { TaskActionCard } from '@/components/chat/task-action-card'
@@ -255,6 +256,7 @@ function ModelSelector({
 
 /* ─── Chat Page ─── */
 export default function Chat() {
+  const { selectedProject } = useProject()
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
   const [model, setModel] = useState('')
@@ -298,11 +300,15 @@ export default function Chat() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/chat/sessions')
+    const url = selectedProject
+      ? `/api/chat/sessions?project_id=${selectedProject.id}`
+      : '/api/chat/sessions'
+    fetch(url)
       .then((r) => r.json())
       .then((data: ChatSession[]) => setSessions(data))
       .catch((err) => console.error('Failed to load sessions:', err))
-  }, [])
+    startNewChat()
+  }, [selectedProject?.id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -394,6 +400,7 @@ export default function Chat() {
           model,
           messages: history.map((m) => ({ role: m.role, content: m.content })),
           session_id: activeSessionId ?? undefined,
+          project_id: selectedProject?.id ?? 'default',
         }),
       })
 

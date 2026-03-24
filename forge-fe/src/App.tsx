@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router'
+import { ProjectProvider } from '@/contexts/project-context'
 import RootLayout from '@/layouts/RootLayout'
 import Overview from '@/pages/Overview'
 import Tasks from '@/pages/Tasks'
@@ -9,17 +10,19 @@ import Connectors from '@/pages/Connectors'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<RootLayout />}>
-          <Route index element={<Overview />} />
-          <Route path="tasks" element={<Tasks />} />
-          <Route path="insights" element={<Insights />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="chat" element={<Chat />} />
-          <Route path="connectors" element={<Connectors />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ProjectProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<RootLayout />}>
+            <Route index element={<Overview />} />
+            <Route path="tasks" element={<Tasks />} />
+            <Route path="insights" element={<Insights />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="chat" element={<Chat />} />
+            <Route path="connectors" element={<Connectors />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ProjectProvider>
   )
 }

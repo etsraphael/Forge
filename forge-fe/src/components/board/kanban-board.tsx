@@ -15,6 +15,7 @@ import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
 
 import type { BoardTask, BoardColumn } from '@/types'
 import { boardColumns } from '@/mock'
+import { useProject } from '@/contexts/project-context'
 import { KanbanColumn } from './kanban-column'
 import { KanbanCard } from './kanban-card'
 import { TaskDetailModal } from './task-detail-modal'
@@ -42,16 +43,20 @@ function mapTask(raw: RawTask): BoardTask {
 }
 
 export function KanbanBoard() {
+  const { selectedProject } = useProject()
   const [tasks, setTasks] = useState<BoardTask[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null)
 
   useEffect(() => {
-    fetch('/api/tasks')
+    const url = selectedProject
+      ? `/api/tasks?project_id=${selectedProject.id}`
+      : '/api/tasks'
+    fetch(url)
       .then((r) => r.json())
       .then((data: RawTask[]) => setTasks(data.map(mapTask)))
       .catch(console.error)
-  }, [])
+  }, [selectedProject?.id])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -172,6 +177,7 @@ export function KanbanBoard() {
         title: 'New task',
         column_id: columnId,
         sort_order: columnTasks.length,
+        project_id: selectedProject?.id ?? 'default',
       }),
     })
     if (!res.ok) return

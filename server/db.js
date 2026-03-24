@@ -13,6 +13,14 @@ export function initDB() {
   db.pragma('foreign_keys = ON')
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT 'bg-primary',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL DEFAULT 'default',
@@ -60,6 +68,16 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_board_tasks_column
       ON board_tasks(column_id, sort_order);
   `)
+
+  // Seed default project if table is empty
+  const projectCount = db
+    .prepare('SELECT COUNT(*) as count FROM projects')
+    .get()
+  if (projectCount.count === 0) {
+    db.prepare(
+      "INSERT INTO projects (id, name, color) VALUES ('default', 'Forge', 'bg-primary')",
+    ).run()
+  }
 
   // Seed initial tasks if table is empty
   const taskCount = db
