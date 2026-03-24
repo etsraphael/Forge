@@ -45,6 +45,7 @@ export function initDB() {
       provider TEXT NOT NULL,
       config TEXT NOT NULL DEFAULT '{}',
       enabled INTEGER NOT NULL DEFAULT 1,
+      project_id TEXT NOT NULL DEFAULT 'default',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );

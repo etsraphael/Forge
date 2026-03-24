@@ -5,19 +5,26 @@ import { LocalGitService } from '../services/local-git.js'
 
 const router = Router()
 
-// GET /api/connectors?category=llm|repository|external
+// GET /api/connectors?category=llm|repository&project_id=xxx
 router.get('/', (req, res) => {
   const db = req.app.get('db')
-  const { category } = req.query
+  const { category, project_id } = req.query
   const rows = db
     .prepare('SELECT * FROM provider_settings ORDER BY created_at ASC')
     .all()
 
-  const connectors = rows.map((r) => ({
+  let connectors = rows.map((r) => ({
     ...r,
     config: JSON.parse(r.config || '{}'),
     enabled: r.enabled === 1,
   }))
+
+  // Repository connectors are project-scoped; LLM connectors are global
+  if (project_id) {
+    connectors = connectors.filter(
+      (c) => c.config.category !== 'repository' || c.project_id === project_id,
+    )
+  }
 
   if (category) {
     return res.json(connectors.filter((c) => c.config.category === category))
@@ -27,7 +34,13 @@ router.get('/', (req, res) => {
 
 // POST /api/connectors
 router.post('/', (req, res) => {
-  const { provider, category, config = {}, enabled = true } = req.body
+  const {
+    provider,
+    category,
+    config = {},
+    enabled = true,
+    project_id = 'default',
+  } = req.body
   if (!provider) return res.status(400).json({ error: 'provider is required' })
   if (!category) return res.status(400).json({ error: 'category is required' })
 
@@ -36,8 +49,8 @@ router.post('/', (req, res) => {
   const configJson = JSON.stringify({ ...config, category })
 
   db.prepare(
-    "INSERT INTO provider_settings (id, provider, config, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
-  ).run(id, provider, configJson, enabled ? 1 : 0)
+    "INSERT INTO provider_settings (id, provider, config, enabled, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+  ).run(id, provider, configJson, enabled ? 1 : 0, project_id)
 
   const row = db.prepare('SELECT * FROM provider_settings WHERE id = ?').get(id)
   res.status(201).json({

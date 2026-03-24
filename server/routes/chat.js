@@ -104,7 +104,11 @@ router.post('/completions', async (req, res) => {
       model,
       lastUserMsg?.content || '',
     )
-    const context = await buildContext(db, { classification, mode: 'chat' })
+    const context = await buildContext(db, {
+      classification,
+      mode: 'chat',
+      projectId: project_id,
+    })
     const augmentedMessages = context
       ? [{ role: 'system', content: context }, ...messages]
       : messages
@@ -235,7 +239,11 @@ router.post('/task-command', async (req, res) => {
     const model = models[0].id
 
     // Build lightweight context for the specific task (no full board/GitHub)
-    const context = await buildContext(db, { mode: 'task-command', task })
+    const context = await buildContext(db, {
+      mode: 'task-command',
+      task,
+      projectId: task.project_id,
+    })
     const messages = []
     if (context) {
       messages.push({ role: 'system', content: context })

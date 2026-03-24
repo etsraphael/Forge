@@ -47,15 +47,21 @@ function formatRelativeTime(dateStr) {
 
 // --- Baseline context (always included with classification path) ---
 
-async function buildBaselineContext(db) {
+async function buildBaselineContext(db, projectId) {
   const parts = []
 
   // Task board summary counts
-  const counts = db
-    .prepare(
-      'SELECT column_id, COUNT(*) as count FROM board_tasks GROUP BY column_id',
-    )
-    .all()
+  const counts = projectId
+    ? db
+        .prepare(
+          'SELECT column_id, COUNT(*) as count FROM board_tasks WHERE project_id = ? GROUP BY column_id',
+        )
+        .all(projectId)
+    : db
+        .prepare(
+          'SELECT column_id, COUNT(*) as count FROM board_tasks GROUP BY column_id',
+        )
+        .all()
   if (counts.length > 0) {
     const summary = counts
       .map((c) => `${c.count} ${columnLabels[c.column_id] || c.column_id}`)
@@ -64,7 +70,7 @@ async function buildBaselineContext(db) {
   }
 
   // Repo identity (GitHub or local git)
-  const github = getFirstGitHubService(db)
+  const github = getFirstGitHubService(db, projectId)
   if (github) {
     try {
       const repo = await github.getRepository()
@@ -78,7 +84,7 @@ async function buildBaselineContext(db) {
     }
   }
   if (!github) {
-    const localGit = getFirstLocalGitService(db)
+    const localGit = getFirstLocalGitService(db, projectId)
     if (localGit) {
       try {
         const repo = localGit.getRepository()
@@ -96,27 +102,30 @@ async function buildBaselineContext(db) {
 
 // --- Task context builders ---
 
-function buildFilteredTaskContext(db) {
+function buildFilteredTaskContext(db, projectId) {
+  const projectFilter = projectId ? ' AND project_id = ?' : ''
+  const projectArgs = projectId ? [projectId] : []
+
   const activeTasks = db
     .prepare(
       `SELECT id, title, type, column_id, priority, description
        FROM board_tasks
-       WHERE column_id IN ('in-progress', 'todo', 'review')
+       WHERE column_id IN ('in-progress', 'todo', 'review')${projectFilter}
        ORDER BY
          CASE column_id WHEN 'in-progress' THEN 1 WHEN 'todo' THEN 2 WHEN 'review' THEN 3 END,
          CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
          sort_order ASC
        LIMIT 20`,
     )
-    .all()
+    .all(...projectArgs)
 
   // Counts for excluded columns
   const excluded = db
     .prepare(
       `SELECT column_id, COUNT(*) as count FROM board_tasks
-       WHERE column_id IN ('ideas', 'shipped') GROUP BY column_id`,
+       WHERE column_id IN ('ideas', 'shipped')${projectFilter} GROUP BY column_id`,
     )
-    .all()
+    .all(...projectArgs)
 
   if (activeTasks.length === 0 && excluded.length === 0) return ''
 
@@ -297,8 +306,8 @@ async function fetchPRsContext(github) {
   return text
 }
 
-async function fetchFilteredGitHubContext(db, flags) {
-  const github = getFirstGitHubService(db)
+async function fetchFilteredGitHubContext(db, flags, projectId) {
+  const github = getFirstGitHubService(db, projectId)
   if (!github) return ''
 
   try {
@@ -379,8 +388,8 @@ function fetchLocalTreeContext(localGit) {
   return text
 }
 
-function fetchFilteredLocalGitContext(db, flags) {
-  const localGit = getFirstLocalGitService(db)
+function fetchFilteredLocalGitContext(db, flags, projectId) {
+  const localGit = getFirstLocalGitService(db, projectId)
   if (!localGit) return ''
 
   try {
@@ -408,7 +417,7 @@ function fetchFilteredLocalGitContext(db, flags) {
  */
 export async function buildContext(
   db,
-  { classification, relevance, mode, task } = {},
+  { classification, relevance, mode, task, projectId } = {},
 ) {
   // Task-command mode: lightweight context only
   if (mode === 'task-command' && task) {
@@ -417,20 +426,24 @@ export async function buildContext(
 
   // LLM classification-based path: baseline always included, detailed sections gated by intent
   if (classification) {
-    const baseline = await buildBaselineContext(db)
+    const baseline = await buildBaselineContext(db, projectId)
     const fetches = []
-    if (classification.tasks) fetches.push(buildFilteredTaskContext(db))
+    if (classification.tasks)
+      fetches.push(buildFilteredTaskContext(db, projectId))
     if (classification.github) {
       fetches.push(
-        fetchFilteredGitHubContext(db, {
-          repo: true,
-          commits: true,
-          issues: true,
-          prs: true,
-        }),
+        fetchFilteredGitHubContext(
+          db,
+          { repo: true, commits: true, issues: true, prs: true },
+          projectId,
+        ),
       )
       fetches.push(
-        fetchFilteredLocalGitContext(db, { repo: true, commits: true }),
+        fetchFilteredLocalGitContext(
+          db,
+          { repo: true, commits: true },
+          projectId,
+        ),
       )
     }
     const parts = await Promise.all(fetches)
@@ -443,14 +456,17 @@ export async function buildContext(
   // No relevance provided (backward compat): include everything
   if (!relevance) {
     const [taskCtx, githubCtx, localGitCtx] = await Promise.all([
-      buildFilteredTaskContext(db),
-      fetchFilteredGitHubContext(db, {
-        repo: true,
-        commits: true,
-        issues: true,
-        prs: true,
-      }),
-      fetchFilteredLocalGitContext(db, { repo: true, commits: true }),
+      buildFilteredTaskContext(db, projectId),
+      fetchFilteredGitHubContext(
+        db,
+        { repo: true, commits: true, issues: true, prs: true },
+        projectId,
+      ),
+      fetchFilteredLocalGitContext(
+        db,
+        { repo: true, commits: true },
+        projectId,
+      ),
     ])
     if (!taskCtx && !githubCtx && !localGitCtx) return ''
     return (
@@ -472,10 +488,10 @@ export async function buildContext(
   }
 
   const fetches = []
-  if (needsTasks) fetches.push(buildFilteredTaskContext(db))
+  if (needsTasks) fetches.push(buildFilteredTaskContext(db, projectId))
   if (anyRepo) {
-    fetches.push(fetchFilteredGitHubContext(db, gh))
-    fetches.push(fetchFilteredLocalGitContext(db, gh))
+    fetches.push(fetchFilteredGitHubContext(db, gh, projectId))
+    fetches.push(fetchFilteredLocalGitContext(db, gh, projectId))
   }
 
   const parts = await Promise.all(fetches)

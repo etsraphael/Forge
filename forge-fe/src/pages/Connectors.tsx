@@ -17,6 +17,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useProject } from '@/contexts/project-context'
 
 type ConnectorCategory = 'llm' | 'repository'
 
@@ -1045,6 +1046,7 @@ function CategorySection({
 }
 
 export default function Connectors() {
+  const { selectedProject } = useProject()
   const [connectors, setConnectors] = useState<Connector[]>([])
   const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([])
   const [connectorStatuses, setConnectorStatuses] = useState<
@@ -1052,7 +1054,10 @@ export default function Connectors() {
   >({})
 
   useEffect(() => {
-    fetch('/api/connectors')
+    const url = selectedProject
+      ? `/api/connectors?project_id=${selectedProject.id}`
+      : '/api/connectors'
+    fetch(url)
       .then((r) => r.json())
       .then((data: Connector[]) => {
         setConnectors(data)
@@ -1076,7 +1081,7 @@ export default function Connectors() {
       .then((r) => r.json())
       .then(setProviderStatuses)
       .catch(console.error)
-  }, [])
+  }, [selectedProject?.id])
 
   const byCategory = (cat: ConnectorCategory) =>
     connectors.filter((c) => c.config.category === cat)
@@ -1089,7 +1094,12 @@ export default function Connectors() {
     const res = await fetch('/api/connectors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, category, config }),
+      body: JSON.stringify({
+        provider,
+        category,
+        config,
+        project_id: selectedProject?.id ?? 'default',
+      }),
     })
     const created: Connector = await res.json()
     setConnectors((prev) => [...prev, created])

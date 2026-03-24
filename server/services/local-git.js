@@ -239,13 +239,15 @@ export function getLocalGitService(db, connectorId) {
 
 /**
  * Get the first enabled local-git connector's service, or null.
+ * When projectId is provided, only returns connectors for that project.
  */
-export function getFirstLocalGitService(db) {
-  const rows = db
-    .prepare(
-      'SELECT * FROM provider_settings WHERE enabled = 1 ORDER BY created_at ASC',
-    )
-    .all()
+export function getFirstLocalGitService(db, projectId) {
+  const query = projectId
+    ? 'SELECT * FROM provider_settings WHERE enabled = 1 AND project_id = ? ORDER BY created_at ASC'
+    : 'SELECT * FROM provider_settings WHERE enabled = 1 ORDER BY created_at ASC'
+  const rows = projectId
+    ? db.prepare(query).all(projectId)
+    : db.prepare(query).all()
   for (const row of rows) {
     const config = JSON.parse(row.config || '{}')
     if (
