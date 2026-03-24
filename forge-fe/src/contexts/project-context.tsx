@@ -9,6 +9,7 @@ interface ProjectContextValue {
   selectedProject: Project | null
   setSelectedProject: (project: Project) => void
   createProject: (name: string, color: string) => Promise<Project>
+  updateProject: (id: string, data: { name: string; color: string }) => Promise<Project>
   deleteProject: (id: string) => Promise<void>
   loading: boolean
 }
@@ -57,6 +58,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [setSelectedProject],
   )
 
+  const updateProject = useCallback(
+    async (id: string, data: { name: string; color: string }): Promise<Project> => {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed to update project')
+      const updated: Project = await res.json()
+      setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)))
+      setSelectedProjectState((current) =>
+        current?.id === id ? updated : current,
+      )
+      return updated
+    },
+    [],
+  )
+
   const deleteProject = useCallback(
     async (id: string): Promise<void> => {
       const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' })
@@ -85,6 +104,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         selectedProject,
         setSelectedProject,
         createProject,
+        updateProject,
         deleteProject,
         loading,
       }}
