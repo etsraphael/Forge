@@ -37,7 +37,7 @@ export function KanbanColumn({
           <button
             onClick={() => onAddTask(column.id)}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="Add task"
+            aria-label="Add task"
           >
             <Plus className="size-3.5" />
           </button>

@@ -29,6 +29,7 @@ export function TypeIcon({ type, size = 'default', className }: TypeIconProps) {
 
   return (
     <span
+      aria-hidden="true"
       className={cn(
         'inline-flex items-center justify-center rounded-lg',
         size === 'sm' ? 'size-5 rounded-md' : 'size-8',

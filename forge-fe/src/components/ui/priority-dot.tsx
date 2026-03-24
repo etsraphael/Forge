@@ -23,7 +23,10 @@ export function PriorityDot({
 
   return (
     <span className={cn('inline-flex items-center gap-1.5', className)}>
-      <span className={cn('size-2 rounded-full', config.color)} />
+      <span
+        aria-hidden="true"
+        className={cn('size-2 rounded-full', config.color)}
+      />
       {showLabel && (
         <span className="text-xs text-muted-foreground">{config.label}</span>
       )}

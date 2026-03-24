@@ -884,7 +884,9 @@ function CategorySection({
                     </span>
                     <button
                       onClick={() => onToggle(c.id, !c.enabled)}
-                      title={c.enabled ? 'Disable' : 'Enable'}
+                      aria-label={
+                        c.enabled ? 'Disable connector' : 'Enable connector'
+                      }
                       className={cn(
                         'ml-1 rounded-md p-1.5 transition-colors',
                         c.enabled
@@ -896,7 +898,7 @@ function CategorySection({
                     </button>
                     <button
                       onClick={() => onDelete(c.id)}
-                      title="Delete"
+                      aria-label="Delete connector"
                       className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="size-3.5" />
