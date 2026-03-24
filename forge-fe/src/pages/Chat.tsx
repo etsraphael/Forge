@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Bot, Trash2, Plus, MessageSquare, Menu, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { relativeTime } from '@/lib/format'
 import { MarkdownContent } from '@/components/chat/markdown-content'
 import { TaskActionCard } from '@/components/chat/task-action-card'
 import type { TaskActionResult } from '@/types'
@@ -43,16 +44,6 @@ const INITIAL_MESSAGES: Message[] = [
       "Hey! I'm your Forge AI assistant. I can help you with tasks, answer questions about your projects, or just chat. What's on your mind?",
   },
 ]
-
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return days === 1 ? 'yesterday' : `${days}d ago`
-}
 
 /* ─── Session Sidebar ─── */
 interface SessionSidebarProps {
@@ -310,7 +301,7 @@ export default function Chat() {
     fetch('/api/chat/sessions')
       .then((r) => r.json())
       .then((data: ChatSession[]) => setSessions(data))
-      .catch(() => {})
+      .catch((err) => console.error('Failed to load sessions:', err))
   }, [])
 
   useEffect(() => {
@@ -341,7 +332,16 @@ export default function Chat() {
           setActiveSessionId(id)
         },
       )
-      .catch(() => {})
+      .catch((err) => {
+        console.error('Failed to load session:', err)
+        setMessages([
+          {
+            id: nextMsgId(),
+            role: 'assistant',
+            content: 'Error: failed to load session. Please try again.',
+          },
+        ])
+      })
   }
 
   function deleteSession(id: string) {
@@ -350,7 +350,17 @@ export default function Chat() {
         setSessions((prev) => prev.filter((s) => s.id !== id))
         if (activeSessionId === id) startNewChat()
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error('Failed to delete session:', err)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextMsgId(),
+            role: 'assistant',
+            content: 'Error: failed to delete session. Please try again.',
+          },
+        ])
+      })
   }
 
   function startNewChat() {
@@ -408,7 +418,7 @@ export default function Chat() {
               savedSessionId = event.session_id
               setActiveSessionId(event.session_id)
               // Prepend new session to sidebar if it's new
-              if (!activeSessionId) {
+              if (!savedSessionId) {
                 const title = text.slice(0, 60)
                 setSessions((prev) => [
                   {

@@ -36,6 +36,38 @@ export const MarkdownContent = memo(function MarkdownContent({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
+        allowedElements={[
+          'p',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'h5',
+          'h6',
+          'ul',
+          'ol',
+          'li',
+          'blockquote',
+          'pre',
+          'code',
+          'span',
+          'em',
+          'strong',
+          'del',
+          'sup',
+          'sub',
+          'a',
+          'img',
+          'br',
+          'hr',
+          'table',
+          'thead',
+          'tbody',
+          'tr',
+          'th',
+          'td',
+          'input',
+        ]}
       >
         {content}
       </ReactMarkdown>

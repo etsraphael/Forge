@@ -239,7 +239,7 @@ export function TaskDetailModal({
                   <button
                     onClick={startEditing}
                     className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    title="Edit task"
+                    aria-label="Edit task"
                   >
                     <Pencil className="size-4" />
                   </button>
